@@ -36,3 +36,31 @@ The repo ships with a root `.htaccess` that routes every request into `public/`,
 
 > If you prefer the cleaner layout, set the document root to `public_html/public` in hPanel and delete the root `.htaccess`.
 
+### Troubleshooting: 500 error right after deploy
+
+A **500** (not 403) means Apache is reaching Laravel but the app can't boot. On a fresh clone the cause is almost always a missing or empty `.env` — it's gitignored, so the server has none, and an empty `APP_KEY` makes every request fail with 500. From Hostinger's hPanel **Terminal** (or SSH), inside the app folder:
+
+```bash
+php -v                            # must be 8.3+ (set per-site in hPanel if not)
+cp .env.example .env              # then fill in real values (DB, APP_URL, Google, Gemini)
+php artisan key:generate          # REQUIRED — empty APP_KEY = 500 on every page
+composer install --no-dev --optimize-autoloader
+chmod -R 775 storage bootstrap/cache
+php artisan migrate --force
+php artisan storage:link
+php artisan optimize
+```
+
+To see the exact error instead of guessing, temporarily set `APP_DEBUG=true` in `.env`, reload, then flip it back. The in-app **Settings → Deployment & Setup** button does all of this for you — but it needs the app bootable first, so the very first `key:generate` must come from the terminal.
+
+### No terminal? `public/setup.php`
+
+If you can't reach a terminal (or the app won't boot at all), the repo ships a **standalone repair page** at `public/setup.php` that runs the same steps from the browser even when the Laravel app cannot boot. It does `key:generate` and `storage:link` in pure PHP (no shell needed) and runs `migrate --force` + `optimize` via the PHP CLI.
+
+1. Make sure the file exists in the deployed `public/` folder (`git checkout public/setup.php` if not).
+2. Add a secret to `.env`: `SETUP_TOKEN=some-long-random-string`.
+3. Open `https://your-site/setup.php`, enter the token, click **Run deployment setup**.
+4. The page reports each step honestly and **deletes itself after a fully successful run**. To bring it back later, re-run `git checkout public/setup.php`.
+
+If `SETUP_TOKEN` is missing the page refuses to do anything. Never leave `setup.php` on a production server after setup.
+
