@@ -118,7 +118,7 @@
 </div>
 
 <!-- Main 2-Column Content Area -->
-<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 28px; align-items: start;">
+<div class="content-grid">
     <!-- Left Column: Content Pipeline -->
     <div style="display: flex; flex-direction: column; gap: 24px;">
     <div class="card">
@@ -142,7 +142,7 @@
             @else
                 <div style="display: flex; flex-direction: column;">
                     @foreach($recentVideos as $video)
-                        <div class="hover-row" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid var(--border-subtle); gap: 16px;">
+                        <div class="hover-row reel-row">
                             <div style="display: flex; align-items: center; gap: 16px; min-width: 0;">
                                 <div style="width: 44px; height: 64px; border-radius: 8px; background: linear-gradient(180deg, #141417, #0b0b0d); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; position: relative;">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="white" opacity="0.8"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -167,7 +167,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <a href="{{ route('videos.show', $video) }}" class="btn btn-secondary btn-sm">
+                            <a href="{{ route('videos.show', $video) }}" class="btn btn-secondary btn-sm reel-review-btn">
                                 Review & Post
                             </a>
                         </div>

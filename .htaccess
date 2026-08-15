@@ -1,0 +1,16 @@
+# Hostinger / cPanel shared hosting
+# ---------------------------------
+# The domain's document root points at this folder (e.g. public_html), but the
+# Laravel entry point lives in public/index.php. This file routes every request
+# into /public — public/.htaccess then forwards non-file paths to index.php.
+#
+# On servers where the document root already points at public/, this file sits
+# outside the document root and is never read, so it is harmless everywhere.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Don't re-enter once a request is already inside /public.
+    RewriteCond %{REQUEST_URI} !^/public
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

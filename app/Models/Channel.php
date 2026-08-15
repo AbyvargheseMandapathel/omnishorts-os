@@ -34,7 +34,7 @@ class Channel extends Model
         return [
             'posts_per_day' => 'integer',
             'post_times' => 'array',
-            'google_client_secret' => 'encrypted',
+            'google_client_secret' => Casts\EncryptedNullable::class,
             'gemini_enabled' => 'boolean',
         ];
     }
@@ -74,7 +74,9 @@ class Channel extends Model
      */
     public function hasGoogleClientSecret(): bool
     {
-        return filled($this->getRawOriginal('google_client_secret'));
+        // Only true when the stored secret can actually be decrypted — a
+        // ciphertext from a different APP_KEY reads back as null.
+        return filled($this->google_client_secret);
     }
 
     /**

@@ -17,7 +17,7 @@
     </div>
 </div>
 
-<div style="display: grid; grid-template-columns: 340px 1fr; gap: 32px; align-items: flex-start;">
+<div class="video-grid">
     <!-- Left Column: 9:16 Vertical Video Preview -->
     <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
         @if($videoUrl)

@@ -26,7 +26,7 @@
 
 <div class="card" style="margin-bottom: 22px;">
     <div class="card-body" style="padding: 20px 24px;">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;">
             <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
             </div>
@@ -62,7 +62,7 @@
                     @endif
                 </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="save-row">
                 <button type="submit" class="btn btn-primary btn-sm">Save Credentials</button>
                 <span style="font-size: 0.78rem; color: var(--text-dim);">
                     @if($hasSecret)
@@ -107,7 +107,7 @@
                 $accountHasOwn = $accountCreds['source'] === 'account';
             @endphp
             <div class="card" style="overflow: hidden;">
-                <div class="card-body" style="padding: 20px 24px; display: flex; align-items: center; gap: 16px;">
+                <div class="card-body account-card-body">
                     @if($account->avatar)
                         <img src="{{ $account->avatar }}" alt="" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">
                     @else
@@ -137,7 +137,7 @@
                             @endif
                         </div>
                     </div>
-                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                    <div class="account-actions">
                         <button type="button" class="btn btn-secondary btn-sm" data-toggle-panel="#cron-{{ $account->id }}" title="Set this channel's own posting cron">Cron</button>
                         <button type="button" class="btn btn-secondary btn-sm" data-toggle-panel="#oauth-{{ $account->id }}">OAuth</button>
                         <button type="button" class="btn btn-secondary btn-sm" data-reconnect-url="{{ route('accounts.youtube.connect', ['account_id' => $account->id, 'popup' => 1]) }}" title="Reconnect this channel with its own Google OAuth">Reconnect</button>

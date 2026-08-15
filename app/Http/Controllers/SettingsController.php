@@ -19,7 +19,9 @@ class SettingsController extends Controller
         return view('settings.index', [
             'geminiEnabled' => $analyzer->enabled(),
             'geminiModel' => $analyzer->model(),
-            'geminiHasApiKey' => filled(Setting::get('gemini.api_key')),
+            // Only "saved" when the stored key actually decrypts (a stale
+            // ciphertext from a changed APP_KEY reads back as empty).
+            'geminiHasApiKey' => filled($analyzer->apiKey()),
             'geminiModels' => GeminiVideoAnalyzer::MODELS,
             'channels' => Auth::user()->channels()->orderBy('name')->get(),
             // Scheduler / cron job state.
@@ -28,6 +30,11 @@ class SettingsController extends Controller
             'cronAnalyticsEnabled' => Setting::get('cron.analytics_enabled', '1') === '1',
             'cronPruneEnabled' => Setting::get('cron.prune_enabled', '1') === '1',
             'lastCronCheckAt' => Setting::get('cron.last_checked') ? Carbon::parse(Setting::get('cron.last_checked')) : null,
+            'cronLastRuns' => [
+                'publish' => Setting::get('cron.last_run.publish') ? Carbon::parse(Setting::get('cron.last_run.publish')) : null,
+                'analytics' => Setting::get('cron.last_run.analytics') ? Carbon::parse(Setting::get('cron.last_run.analytics')) : null,
+                'prune' => Setting::get('cron.last_run.prune') ? Carbon::parse(Setting::get('cron.last_run.prune')) : null,
+            ],
             // Exact crontab line to paste on Linux / Hostinger (cPanel Cron Jobs).
             'cronLine' => '* * * * * cd '.base_path().' && '.PHP_BINARY.' artisan schedule:run >> /dev/null 2>&1',
         ]);

@@ -29,6 +29,7 @@ class ProcessDuePublications extends Command
         // Heartbeat for the dashboard cron status widget — a stale timestamp
         // means the scheduler has stopped running.
         Setting::set('cron.last_checked', now()->toDateTimeString());
+        Setting::set('cron.last_run.publish', now()->toDateTimeString());
 
         $due = Publication::with(['video', 'socialAccount'])
             ->where('status', 'scheduled')

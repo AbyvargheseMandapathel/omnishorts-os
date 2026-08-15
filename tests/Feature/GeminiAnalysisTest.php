@@ -11,6 +11,7 @@ use App\Models\Video;
 use App\Services\GeminiVideoAnalyzer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -95,6 +96,44 @@ class GeminiAnalysisTest extends TestCase
             'status' => 'scheduled',
             'scheduled_at' => now()->subMinute(),
         ]);
+    }
+
+    public function test_undecryptable_oauth_secret_does_not_crash_pages(): void
+    {
+        [$user, $channel] = $this->createUserWithChannelAndYoutube();
+        // Simulate a secret encrypted with a different APP_KEY: raw write
+        // bypasses the cast so a garbage ciphertext lands in the DB.
+        DB::table('channels')
+            ->where('id', $channel->id)
+            ->update(['google_client_secret' => 'stale-ciphertext-from-old-key']);
+        $channel->refresh();
+
+        // Reads back as null instead of throwing DecryptException.
+        $this->assertNull($channel->google_client_secret);
+        $this->assertFalse($channel->hasGoogleClientSecret());
+        $this->assertSame('env', $channel->googleOAuthCredentials()['source']);
+
+        // Dashboard + accounts render fine (sidebar reads these creds).
+        $this->actingAs($user)->get(route('dashboard'))->assertOk();
+        $this->actingAs($user)->get(route('accounts.index'))->assertOk();
+    }
+
+    public function test_settings_page_does_not_claim_broken_gemini_key_is_saved(): void
+    {
+        [$user] = $this->createUserWithChannelAndYoutube();
+        $this->enableGemini();
+
+        // Overwrite with a stale/undecryptable ciphertext (raw write).
+        DB::table('settings')
+            ->where('key', 'gemini.api_key')
+            ->update(['value' => 'stale-ciphertext-from-old-key']);
+
+        $response = $this->actingAs($user)->get(route('settings.index'));
+
+        $response->assertOk();
+        // Not "saved" anymore — the field shows the blank placeholder instead.
+        $response->assertDontSee('••• saved •••', false);
+        $response->assertSee('AIza', false);
     }
 
     public function test_settings_save_stores_key_encrypted_and_page_masks_it(): void

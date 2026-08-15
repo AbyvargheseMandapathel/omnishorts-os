@@ -18,6 +18,7 @@ class PruneVideoFiles extends Command
     public function handle(): int
     {
         Setting::set('cron.last_checked', now()->toDateTimeString());
+        Setting::set('cron.last_run.prune', now()->toDateTimeString());
 
         $diskName = (string) config('filesystems.video_disk', 'public');
         $storage = Storage::disk($diskName);

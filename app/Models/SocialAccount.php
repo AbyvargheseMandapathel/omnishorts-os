@@ -34,7 +34,7 @@ class SocialAccount extends Model
         return [
             'follower_count' => 'integer',
             'credentials' => 'array',
-            'google_client_secret' => 'encrypted',
+            'google_client_secret' => Casts\EncryptedNullable::class,
             'posts_per_day' => 'integer',
             'post_times' => 'array',
         ];
@@ -130,7 +130,9 @@ class SocialAccount extends Model
      */
     public function hasGoogleClientSecret(): bool
     {
-        return filled($this->getRawOriginal('google_client_secret'));
+        // Only true when the stored secret can actually be decrypted — a
+        // ciphertext from a different APP_KEY reads back as null.
+        return filled($this->google_client_secret);
     }
 
     /**

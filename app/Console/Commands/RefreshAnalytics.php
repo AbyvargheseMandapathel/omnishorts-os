@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Publication;
+use App\Models\Setting;
 use App\Models\SocialAccount;
 use App\Services\YouTubeAnalytics;
 use Illuminate\Console\Command;
@@ -15,6 +16,8 @@ class RefreshAnalytics extends Command
 
     public function handle(): int
     {
+        Setting::set('cron.last_run.analytics', now()->toDateTimeString());
+
         $analytics = app(YouTubeAnalytics::class);
 
         $publications = Publication::with('socialAccount')

@@ -33,6 +33,9 @@ class SchedulerStatus extends Command
         }
 
         $this->line('Last heartbeat: '.(Setting::get('cron.last_checked') ?? 'never'));
+        $this->line('Last run — publish: '.(Setting::get('cron.last_run.publish') ?? 'never'));
+        $this->line('Last run — analytics: '.(Setting::get('cron.last_run.analytics') ?? 'never'));
+        $this->line('Last run — prune: '.(Setting::get('cron.last_run.prune') ?? 'never'));
         $this->line('Auto-publish enabled: '.(Setting::get('cron.enabled', '1') === '1' ? 'yes' : 'no'));
         $this->line('  process-due (every minute): '.(Setting::get('cron.publish_enabled', '1') === '1' ? 'on' : 'off'));
         $this->line('  analytics:refresh (twice daily, 08:00 & 20:00): '.(Setting::get('cron.analytics_enabled', '1') === '1' ? 'on' : 'off'));

@@ -73,7 +73,7 @@
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 8px;">
                         @forelse($channels as $channel)
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                            <div class="channel-override-row">
                                 <div style="min-width: 0;">
                                     <div style="font-weight: 600; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $channel->name }}</div>
                                     <div style="font-size: 0.72rem; color: var(--text-dim);">
@@ -96,7 +96,7 @@
                     </div>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
+                <div class="save-row" style="margin-top: 16px;">
                     <button type="submit" class="btn btn-primary btn-sm">Save Settings</button>
                     <button type="button" class="btn btn-secondary btn-sm" id="testGeminiBtn" data-test-url="{{ route('settings.gemini.test') }}" @if(!$geminiHasApiKey) disabled title="Save an API key first" @endif>Test Gemini Connection</button>
                     <span id="geminiTestResult" style="font-size: 0.8rem;"></span>
@@ -137,30 +137,39 @@
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                    <div class="cron-job-row">
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 600; font-size: 0.85rem;">Auto-publish due reels</div>
                             <div style="font-size: 0.72rem; color: var(--text-dim);">Checks every minute · uploads scheduled videos to YouTube</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px;">
+                                Last ran: @if(isset($cronLastRuns['publish']))<strong style="color: var(--text-main);">{{ $cronLastRuns['publish']->diffForHumans() }}</strong> · {{ $cronLastRuns['publish']->format('h:i A') }}@else<em>never</em>@endif
+                            </div>
                         </div>
                         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;">
                             <input type="checkbox" name="publish_enabled" value="1" style="accent-color: var(--primary);" {{ $cronPublishEnabled ? 'checked' : '' }}>
                             On
                         </label>
                     </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                    <div class="cron-job-row">
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 600; font-size: 0.85rem;">Refresh YouTube analytics</div>
                             <div style="font-size: 0.72rem; color: var(--text-dim);">Runs twice daily (08:00 &amp; 20:00) · views, likes, comments, shares, subscribers</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px;">
+                                Last ran: @if(isset($cronLastRuns['analytics']))<strong style="color: var(--text-main);">{{ $cronLastRuns['analytics']->diffForHumans() }}</strong> · {{ $cronLastRuns['analytics']->format('h:i A') }}@else<em>never</em>@endif
+                            </div>
                         </div>
                         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;">
                             <input type="checkbox" name="analytics_enabled" value="1" style="accent-color: var(--primary);" {{ $cronAnalyticsEnabled ? 'checked' : '' }}>
                             On
                         </label>
                     </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                    <div class="cron-job-row">
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 600; font-size: 0.85rem;">Prune old video files</div>
                             <div style="font-size: 0.72rem; color: var(--text-dim);">Runs daily · frees hosting storage by deleting files past retention</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px;">
+                                Last ran: @if(isset($cronLastRuns['prune']))<strong style="color: var(--text-main);">{{ $cronLastRuns['prune']->diffForHumans() }}</strong> · {{ $cronLastRuns['prune']->format('h:i A') }}@else<em>never</em>@endif
+                            </div>
                         </div>
                         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;">
                             <input type="checkbox" name="prune_enabled" value="1" style="accent-color: var(--primary);" {{ $cronPruneEnabled ? 'checked' : '' }}>
@@ -169,7 +178,7 @@
                     </div>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="save-row">
                     <button type="submit" class="btn btn-primary btn-sm">Save Cron Settings</button>
                     @if($lastCronCheckAt)
                         <span style="font-size: 0.76rem; color: var(--text-dim);">Last scheduler check: {{ $lastCronCheckAt->diffForHumans() }} · {{ $lastCronCheckAt->format('h:i A') }}</span>
@@ -182,7 +191,7 @@
                 <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 12px;">
                     The scheduler needs ONE OS entry that runs <code style="font-size: 0.72rem;">artisan schedule:run</code> every minute — the job list above is read from the app automatically, so nothing else ever needs updating. On Windows the button creates a Task Scheduler entry; on Linux/Hostinger it installs a crontab line.
                 </div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+                <div class="save-row" style="margin-bottom: 14px;">
                     <form method="POST" action="{{ route('settings.cron.install') }}">
                         @csrf
                         <button type="submit" class="btn btn-secondary btn-sm">↻ Install / Sync Cron</button>

@@ -11,6 +11,7 @@ use App\Models\Video;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class CronSettingsTest extends TestCase
@@ -67,6 +68,35 @@ class CronSettingsTest extends TestCase
         $response->assertSee('Scheduler &amp; Cron Jobs', false);
         $response->assertSee('Install / Sync Cron', false);
         $response->assertSee('artisan schedule:run', false);
+    }
+
+    public function test_commands_stamp_last_run_per_job(): void
+    {
+        $this->createUserWithChannelAndYoutube();
+        Storage::fake('public');
+
+        $this->artisan('publications:process-due')->assertExitCode(0);
+        $this->artisan('analytics:refresh')->assertExitCode(0);
+        $this->artisan('videos:prune-files')->assertExitCode(0);
+
+        $this->assertNotNull(Setting::get('cron.last_run.publish'));
+        $this->assertNotNull(Setting::get('cron.last_run.analytics'));
+        $this->assertNotNull(Setting::get('cron.last_run.prune'));
+    }
+
+    public function test_settings_page_shows_last_run_under_each_job(): void
+    {
+        [$user] = $this->createUserWithChannelAndYoutube();
+        Setting::set('cron.last_run.publish', now()->subMinutes(3)->toDateTimeString());
+        Setting::set('cron.last_run.analytics', now()->subHours(5)->toDateTimeString());
+
+        $response = $this->actingAs($user)->get(route('settings.index'));
+
+        $response->assertOk();
+        // Every job row shows its own last-run time (or "never").
+        $this->assertSame(3, substr_count($response->getContent(), 'Last ran:'));
+        $response->assertSee('3 minutes ago', false);
+        $response->assertSee('never', false); // prune has never run
     }
 
     public function test_schedule_guards_respect_cron_settings(): void

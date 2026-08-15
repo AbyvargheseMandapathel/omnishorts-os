@@ -18,7 +18,21 @@ OmniShorts is a modern, full-stack content operating system built for digital cr
 
 ## 🛠️ Tech Stack
 
-- **Backend:** Laravel 11 / PHP 8.2+
+- **Backend:** Laravel 13 / PHP 8.3+
 - **Frontend:** Blade Templates & Custom Vanilla CSS Design System (Obsidian Dark Theme)
 - **Database:** SQLite / MySQL / PostgreSQL
 - **APIs:** Google Identity Services & YouTube Data API v3
+
+## 🚀 Deploying to Hostinger (shared hosting)
+
+The repo ships with a root `.htaccess` that routes every request into `public/`, so the site works straight from `public_html` — no document-root changes needed. The lock file is platform-pinned to PHP 8.3, so `composer install` succeeds even where `ext-ftp` is missing (it only matters if you actually use the FTP disk).
+
+1. **PHP version:** hPanel → Websites → your site → Advanced → set PHP to **8.3 or newer** (Laravel 13 requires it).
+2. **Upload the app:** clone the repo into the site folder (e.g. `public_html`) — the root `.htaccess` does the rest.
+3. **Dependencies:** `composer install --no-dev --optimize-autoloader`.
+4. **Environment:** copy `.env.example` to `.env`, fill in real values (MySQL, FTP, Google OAuth, Gemini), then `php artisan key:generate`. Secrets are encrypted with the server's key — re-enter your Google client secret and Gemini key once in the app.
+5. **Storage & DB:** `php artisan storage:link`, `php artisan migrate --force`, and ensure `storage/` + `bootstrap/cache/` are writable.
+6. **Cron:** Settings → Scheduler & Cron Jobs shows the exact crontab line for this server (real PHP/artisan paths) — paste it into hPanel → Cron Jobs.
+
+> If you prefer the cleaner layout, set the document root to `public_html/public` in hPanel and delete the root `.htaccess`.
+
