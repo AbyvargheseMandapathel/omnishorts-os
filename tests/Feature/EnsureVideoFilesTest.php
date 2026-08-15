@@ -63,7 +63,7 @@ class EnsureVideoFilesTest extends TestCase
         // getID3 (already a dependency) must parse it as a real mp4/avc1 file.
         $tmp = tempnam(sys_get_temp_dir(), 'ph');
         file_put_contents($tmp, $bytes);
-        $info = (new \getID3())->analyze($tmp);
+        $info = (new \getID3)->analyze($tmp);
         @unlink($tmp);
 
         $this->assertSame('mp4', $info['fileformat'] ?? null);

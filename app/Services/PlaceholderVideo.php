@@ -79,6 +79,7 @@ class PlaceholderVideo
                 $start = $pos + 3;
             } else {
                 $pos++;
+
                 continue;
             }
 

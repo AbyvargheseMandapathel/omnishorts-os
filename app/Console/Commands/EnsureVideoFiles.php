@@ -23,7 +23,14 @@ class EnsureVideoFiles extends Command
     public function handle(): int
     {
         $diskName = (string) config('filesystems.video_disk', 'public');
-        $disk = Storage::disk($diskName);
+
+        try {
+            $disk = Storage::disk($diskName);
+        } catch (Throwable $e) {
+            $this->error('Could not access the "'.$diskName.'" disk: '.$e->getMessage().' — fix the disk configuration (see /health).');
+
+            return self::FAILURE;
+        }
 
         $videos = Video::all()->filter(function (Video $video) use ($disk) {
             return ! $video->file_path || ! $disk->exists($video->file_path);
@@ -54,10 +61,12 @@ class EnsureVideoFiles extends Command
             try {
                 if ($disk->put($path, PlaceholderVideo::mp4()) === false) {
                     $this->error("  Failed to write placeholder for #{$video->id} — is the video disk writable? (see /health)");
+
                     continue;
                 }
             } catch (Throwable $e) {
                 $this->error("  Failed to write placeholder for #{$video->id}: {$e->getMessage()}");
+
                 continue;
             }
 
