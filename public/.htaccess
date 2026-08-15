@@ -1,3 +1,12 @@
+# Disable ModSecurity — Hostinger's WAF blocks file uploads with 403
+<IfModule mod_security2.c>
+    SecRuleEngine Off
+</IfModule>
+<IfModule mod_security.c>
+    SecFilterEngine Off
+    SecFilterScanPOST Off
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
