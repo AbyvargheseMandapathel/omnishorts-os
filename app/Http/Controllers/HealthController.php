@@ -7,6 +7,7 @@ use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -29,8 +30,9 @@ class HealthController extends Controller
         $database = $this->checkDatabase();
         $migrations = $this->checkMigrations();
         $storage = $this->checkStorage();
+        $videoDisk = $this->checkVideoDisk();
 
-        $ok = $php['ok'] && $database['ok'] && $migrations['ok'] && $storage['ok'];
+        $ok = $php['ok'] && $database['ok'] && $migrations['ok'] && $storage['ok'] && $videoDisk['ok'];
 
         return response()->json([
             'ok' => $ok,
@@ -49,6 +51,7 @@ class HealthController extends Controller
             'database' => $database,
             'migrations' => $migrations,
             'storage' => $storage,
+            'video_disk' => $videoDisk,
         ], $ok ? 200 : 503)
             ->header('Cache-Control', 'no-store')
             ->header('X-Robots-Tag', 'noindex, nofollow');
@@ -189,6 +192,35 @@ class HealthController extends Controller
             return true;
         } catch (Throwable) {
             return false;
+        }
+    }
+
+    /**
+     * Probe the configured video disk (public/ftp/s3) with a real write+delete —
+     * the direct answer to "my video wasn't saved" when files silently go
+     * missing because a misconfigured ftp disk swallows the error (throw=false).
+     *
+     * @return array{ok: bool, disk: string, url?: string, error?: string}
+     */
+    private function checkVideoDisk(): array
+    {
+        $diskName = (string) config('filesystems.video_disk', 'public');
+
+        try {
+            $disk = Storage::disk($diskName);
+            $probe = 'health-probe-'.bin2hex(random_bytes(4));
+            $written = $disk->put($probe, 'ok');
+            if ($written) {
+                $disk->delete($probe);
+            }
+
+            return [
+                'ok' => (bool) $written,
+                'disk' => $diskName,
+                'url' => (string) config('filesystems.disks.'.$diskName.'.url', ''),
+            ];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'disk' => $diskName, 'error' => $e->getMessage()];
         }
     }
 

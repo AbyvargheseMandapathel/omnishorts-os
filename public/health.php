@@ -235,11 +235,93 @@ function health_logs(string $root, bool $logsDirWritable): array
     ];
 }
 
+/**
+ * Probe where uploaded reels actually land. With VIDEO_DISK=ftp the file goes
+ * to the FTP server (FTP_ROOT), so the local storage checks can be fine while
+ * every upload silently fails (Laravel's throw=false swallows the write error).
+ * Connects, logs in, and writes+deletes a probe file directly inside FTP_ROOT.
+ * Never echoes credentials; connection attempts are capped at 10s.
+ *
+ * @return array<string, mixed>
+ */
+function health_video_disk(string $root, array $env): array
+{
+    $disk = $env['VIDEO_DISK'] ?? 'public';
+
+    if ($disk !== 'ftp') {
+        return [
+            'ok' => true,
+            'disk' => $disk,
+            'detail' => 'Files are stored on the local "'.$disk.'" disk (storage/app/public) — served via the public/storage link. Not probed over FTP.',
+        ];
+    }
+
+    $host = $env['FTP_HOST'] ?? '';
+    if ($host === '') {
+        return [
+            'ok' => false,
+            'disk' => 'ftp',
+            'detail' => 'VIDEO_DISK=ftp but FTP_HOST is not set in .env — uploads cannot work. Add the FTP_* variables or switch VIDEO_DISK=public.',
+        ];
+    }
+
+    $port = (int) ($env['FTP_PORT'] ?? 21);
+    $username = $env['FTP_USERNAME'] ?? '';
+    $password = $env['FTP_PASSWORD'] ?? '';
+    $rootDir = rtrim($env['FTP_ROOT'] ?? '/', '/');
+    $ssl = ($env['FTP_SSL'] ?? 'false') === 'true';
+
+    $conn = $ssl ? @ftp_ssl_connect($host, $port, 10) : @ftp_connect($host, $port, 10);
+    if ($conn === false) {
+        return [
+            'ok' => false,
+            'disk' => 'ftp',
+            'detail' => 'FTP connection to '.$host.':'.$port.' failed — check FTP_HOST/FTP_PORT and that FTP access is enabled. (Credentials are never echoed.)',
+        ];
+    }
+
+    try {
+        if (@ftp_login($conn, $username, $password) === false) {
+            return ['ok' => false, 'disk' => 'ftp', 'detail' => 'FTP login failed — check FTP_USERNAME/FTP_PASSWORD. (Credentials are never echoed.)'];
+        }
+
+        $probe = '.health-'.bin2hex(random_bytes(4));
+        $target = ($rootDir === '' ? '' : $rootDir.'/').$probe;
+        $handle = fopen('php://temp', 'r+');
+        fwrite($handle, 'ok');
+        rewind($handle);
+        $written = @ftp_fput($conn, $target, $handle, FTP_BINARY);
+        fclose($handle);
+
+        if ($written === false) {
+            return [
+                'ok' => false,
+                'disk' => 'ftp',
+                'detail' => 'Could not write a probe file to FTP_ROOT ('.$rootDir.'). The folder may not exist or may not be writable — create it in hPanel and make sure FTP_ROOT matches the FTP account home (a common Hostinger mismatch).',
+            ];
+        }
+
+        @ftp_delete($conn, $target);
+
+        return ['ok' => true, 'disk' => 'ftp', 'detail' => 'FTP login OK and a probe file was written to and deleted from FTP_ROOT ('.$rootDir.').'];
+    } catch (Throwable $e) {
+        return ['ok' => false, 'disk' => 'ftp', 'detail' => 'FTP probe error: '.$e->getMessage()];
+    } finally {
+        @ftp_close($conn);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Assemble the report
 // ---------------------------------------------------------------------------
 
 $env = health_env($root);
+
+// Video disk — where uploaded reels actually land. With VIDEO_DISK=ftp the
+// file goes to the FTP server (FTP_ROOT), so the storage checks above can be
+// fine while every upload silently fails (throw=false swallows the write
+// error). Probe the real destination.
+$checks['video_disk'] = health_video_disk($root, $env);
 
 // PHP (the web SAPI — this file running is proof of at least that).
 $missingExtensions = [];
@@ -280,7 +362,8 @@ $ok = $checks['php']['ok']
     && $checks['env']['ok']
     && $checks['database']['ok']
     && $checks['migrations']['ok']
-    && $checks['storage']['ok'];
+    && $checks['storage']['ok']
+    && $checks['video_disk']['ok'];
 
 http_response_code($ok ? 200 : 503);
 

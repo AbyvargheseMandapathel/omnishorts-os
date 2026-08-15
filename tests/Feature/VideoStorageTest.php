@@ -264,4 +264,52 @@ class VideoStorageTest extends TestCase
         Storage::disk('public')->assertExists('videos/orphan.mp4');
         $this->assertSame('videos/old.mp4', $old->fresh()->file_path);
     }
+
+    public function test_upload_fails_loudly_when_video_disk_write_fails(): void
+    {
+        [$user] = $this->createUserWithChannelAndYoutube();
+        // A disk whose root lives under a real FILE: mkdir fails on every OS,
+        // so the write returns false (throw=false) — exactly what a misconfigured
+        // ftp disk does in production.
+        config([
+            'filesystems.video_disk' => 'broken',
+            'filesystems.disks.broken' => [
+                'driver' => 'local',
+                'root' => base_path('composer.json').'/videos',
+                'throw' => false,
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('videos.store'), [
+            'title' => 'Lost Reel',
+            'video_file' => UploadedFile::fake()->create('reel.mp4', 100, 'video/mp4'),
+        ]);
+
+        $response->assertSessionHasErrors('video_file');
+        $this->assertDatabaseMissing('videos', ['title' => 'Lost Reel']);
+    }
+
+    public function test_bulk_import_fails_loudly_when_no_file_can_be_saved(): void
+    {
+        [$user] = $this->createUserWithChannelAndYoutube();
+        config([
+            'filesystems.video_disk' => 'broken',
+            'filesystems.disks.broken' => [
+                'driver' => 'local',
+                'root' => base_path('composer.json').'/videos',
+                'throw' => false,
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('videos.bulk.store'), [
+            'videos' => [
+                UploadedFile::fake()->create('one.mp4', 100, 'video/mp4'),
+                UploadedFile::fake()->create('two.mp4', 100, 'video/mp4'),
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('videos');
+        $this->assertDatabaseCount('videos', 0);
+        $this->assertDatabaseCount('publications', 0);
+    }
 }

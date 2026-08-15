@@ -10,6 +10,13 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Serve real files/dirs at the document root directly (e.g. a /videos
+    # folder written by the FTP video disk) instead of rewriting them into
+    # /public — without this, /videos/foo.mp4 would 404 through Laravel.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
     # Don't re-enter once a request is already inside /public.
     RewriteCond %{REQUEST_URI} !^/public
     RewriteRule ^(.*)$ public/$1 [L]

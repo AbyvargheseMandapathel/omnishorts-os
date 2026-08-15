@@ -56,6 +56,8 @@ class HealthTest extends TestCase
         $response->assertJsonPath('migrations.ok', true);
         $this->assertSame([], $response->json('migrations.pending'));
         $response->assertJsonPath('storage.ok', true);
+        $response->assertJsonPath('video_disk.ok', true);
+        $response->assertJsonPath('video_disk.disk', config('filesystems.video_disk'));
         // The session middleware appends ", private" on top of our no-store.
         $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
     }
@@ -164,6 +166,8 @@ class HealthTest extends TestCase
         $this->assertTrue($data['checks']['migrations']['ok']);
         $this->assertSame([], $data['checks']['migrations']['pending']);
         $this->assertTrue($data['checks']['storage']['ok']);
+        $this->assertTrue($data['checks']['video_disk']['ok']);
+        $this->assertSame('public', $data['checks']['video_disk']['disk']);
         $this->assertFalse($data['checks']['env']['app_debug']);
         // The .env secret never leaks into the response.
         $this->assertStringNotContainsString('keep-secret-value-123', $json);
@@ -195,5 +199,19 @@ class HealthTest extends TestCase
         // Credentials never appear in the response, even inside the error text.
         $this->assertStringNotContainsString('SuperSecretPw!', $json);
         $this->assertStringNotContainsString('topsecret-app-key-123', $json);
+    }
+
+    public function test_standalone_health_flags_ftp_config_without_host(): void
+    {
+        $f = $this->buildStandaloneFixture([], "APP_KEY=base64:key-123\nVIDEO_DISK=ftp\nDB_CONNECTION=sqlite\nDB_DATABASE=db.sqlite\n");
+
+        [$json] = $this->runStandalone($f);
+
+        $data = json_decode($json, true);
+        $this->assertIsArray($data);
+        $this->assertFalse($data['checks']['video_disk']['ok']);
+        $this->assertSame('ftp', $data['checks']['video_disk']['disk']);
+        $this->assertStringContainsString('FTP_HOST', $data['checks']['video_disk']['detail']);
+        $this->assertFalse($data['ok']);
     }
 }

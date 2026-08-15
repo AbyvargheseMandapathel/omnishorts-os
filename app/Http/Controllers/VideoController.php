@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 class VideoController extends Controller
 {
@@ -69,7 +70,32 @@ class VideoController extends Controller
         $filePath = null;
         $duration = null;
         if ($request->hasFile('video_file')) {
-            $filePath = $request->file('video_file')->store('videos', $this->videoDisk());
+            $writeError = null;
+            try {
+                // Returns false when the disk write fails (throw=false on the
+                // ftp/local disks) but can also THROW (e.g. local adapter
+                // construction) — catch both instead of silently creating a
+                // video with no file, which is how "my video wasn't saved"
+                // happens on a misconfigured disk.
+                $filePath = $request->file('video_file')->store('videos', $this->videoDisk());
+            } catch (Throwable $e) {
+                $filePath = false;
+                $writeError = $e->getMessage();
+            }
+
+            if ($filePath === false) {
+                $disk = $this->videoDisk();
+                $error = "Could not save the video file to the \"{$disk}\" disk"
+                    .($writeError !== null ? " ({$writeError})" : ' — the write failed silently')
+                    .'. Check the disk configuration and permissions (the /health endpoint probes storage and the video disk).';
+
+                if ($request->wantsJson()) {
+                    return response()->json(['success' => false, 'error' => $error], 422);
+                }
+
+                return back()->withErrors(['video_file' => $error])->withInput();
+            }
+
             $duration = app(VideoProbe::class)->durationSeconds($request->file('video_file')->getRealPath());
         }
 
@@ -146,8 +172,22 @@ class VideoController extends Controller
         $postsPerDay = count($timeSlots);
 
         $videos = [];
+        $failedFiles = [];
         foreach ($request->file('videos') as $file) {
-            $filePath = $file->store('videos', $this->videoDisk());
+            try {
+                // Disk write failures surface as false (throw=false) or as a
+                // thrown exception — never let either become a file-less video.
+                $filePath = $file->store('videos', $this->videoDisk());
+            } catch (Throwable) {
+                $filePath = false;
+            }
+
+            if ($filePath === false) {
+                $failedFiles[] = $file->getClientOriginalName();
+
+                continue;
+            }
+
             $duration = app(VideoProbe::class)->durationSeconds($file->getRealPath());
             $cleanName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
             $title = Str::title(str_replace(['-', '_'], ' ', $cleanName));
@@ -164,6 +204,16 @@ class VideoController extends Controller
                     'hashtags' => '#shorts #reels #viral #growth #'.strtolower(str_replace(' ', '', substr($channel->category ?? 'content', 0, 10))),
                 ],
             ]);
+        }
+
+        if (empty($videos)) {
+            $disk = $this->videoDisk();
+            $failedList = implode(', ', array_slice($failedFiles, 0, 5)).(count($failedFiles) > 5 ? ' …' : '');
+
+            return back()->withErrors([
+                'videos' => "None of the files could be saved to the \"{$disk}\" disk ({$failedList}). ".
+                    'The write failed silently — check the disk configuration and permissions (the /health endpoint probes storage and the video disk).',
+            ])->withInput();
         }
 
         $dateCursor = $startDate->copy()->startOfDay();
@@ -191,9 +241,16 @@ class VideoController extends Controller
         $totalDays = (int) ceil(count($videos) / $postsPerDay);
         $timesLabel = implode(' & ', array_map(fn ($t) => Carbon::createFromFormat('H:i', $t)->format('h:i A'), $timeSlots));
 
+        $message = count($videos).' reels queued to YouTube — '.$postsPerDay.' post(s)/day at '.$timesLabel.' for '.$totalDays.' day(s) starting '.$startDate->format('M d, Y').'.';
+        if ($failedFiles !== []) {
+            $message .= ' Warning: '.count($failedFiles).' file(s) could not be saved ('
+                .implode(', ', array_slice($failedFiles, 0, 3)).(count($failedFiles) > 3 ? ' …' : '')
+                .') — they were skipped. Check the video disk (see /health).';
+        }
+
         return redirect()
             ->route('calendar.index', ['date' => $startDate->toDateString()])
-            ->with('success', count($videos).' reels queued to YouTube — '.$postsPerDay.' post(s)/day at '.$timesLabel.' for '.$totalDays.' day(s) starting '.$startDate->format('M d, Y').'.');
+            ->with('success', $message);
     }
 
     public function show(Video $video)
@@ -343,7 +400,7 @@ class VideoController extends Controller
                 if (app(YouTubeAnalytics::class)->refresh($publication) !== null) {
                     $refreshed++;
                 }
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Best-effort — never break the page over a stats fetch.
             }
         }
@@ -431,7 +488,7 @@ class VideoController extends Controller
 
             try {
                 $videoId = app(YouTubeUploader::class)->upload($account, $video, $customTitle, $customCaption, $tags);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 return back()->withErrors(['youtube' => 'YouTube upload failed: '.$e->getMessage()]);
             }
 
@@ -474,7 +531,7 @@ class VideoController extends Controller
         if ($status === 'published' && $videoId) {
             try {
                 app(YouTubeAnalytics::class)->refresh($publication->fresh());
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Ignore — stats are best-effort.
             }
         }
