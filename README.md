@@ -64,3 +64,14 @@ If you can't reach a terminal (or the app won't boot at all), the repo ships a *
 
 If `SETUP_TOKEN` is missing the page refuses to do anything. Never leave `setup.php` on a production server after setup.
 
+### CLI PHP older than the web PHP (Hostinger)
+
+A common Hostinger trap: the **web** SAPI runs PHP 8.3+ (site loads, app boots) but the **CLI** `php` on PATH is older (e.g. 8.2), so every `php artisan ...` command dies with *"Your Composer dependencies require a PHP version \">= 8.3.0\". You are running 8.2.x"* — and the scheduler cron silently fails. `setup.php`, the Settings **Run Deployment Setup** button, and the displayed crontab line all auto-detect a PHP ≥ 8.3 binary (`php8.4`/`php8.3` first), so they keep working. For manual/cron usage, use the versioned binary too:
+
+```bash
+php8.3 artisan migrate --force     # or php8.4, whatever exists (ls /usr/bin/php*)
+# crontab line:  * * * * * cd /home/.../public_html && php8.3 artisan schedule:run >> /dev/null 2>&1
+```
+
+Check what you have with `ls /usr/bin/php*` and `php -v`. Prefer enabling PHP 8.3+ for the whole site in hPanel → Websites → PHP Configuration.
+

@@ -78,6 +78,38 @@ function setup_resolve_token(): ?string
  * @param  list<string>  $arguments
  * @return array{0: bool, 1: string}
  */
+/**
+ * Find a PHP CLI binary that can run the app (>= 8.3). On shared hosts the
+ * web SAPI can be newer than the CLI "php" on PATH (Hostinger: web 8.3, CLI
+ * 8.2) — Composer's platform check then kills artisan. Returns [binary, version].
+ *
+ * @return array{binary: string, version: string}
+ */
+function setup_detect_php(): array
+{
+    static $detected = null;
+    if ($detected !== null) {
+        return $detected;
+    }
+
+    $candidates = array_values(array_unique(array_filter([
+        PHP_BINARY,
+        'php8.4', 'php84', 'php8.3', 'php83', 'php',
+    ], fn (string $candidate) => $candidate !== '')));
+
+    foreach ($candidates as $candidate) {
+        $output = [];
+        $code = 1;
+        @exec(escapeshellarg($candidate).' -r '.escapeshellarg('echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;').' 2>&1', $output, $code);
+        $version = trim((string) ($output[0] ?? ''));
+        if ($code === 0 && preg_match('/^\d+\.\d+$/', $version) && version_compare($version, '8.3', '>=')) {
+            return $detected = ['binary' => $candidate, 'version' => $version];
+        }
+    }
+
+    return $detected = ['binary' => PHP_BINARY, 'version' => PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION];
+}
+
 function setup_cli(array $arguments): array
 {
     $disabled = in_array('exec', array_map('trim', explode(',', (string) ini_get('disable_functions'))), true);
@@ -87,7 +119,7 @@ function setup_cli(array $arguments): array
     }
 
     $command = 'cd '.escapeshellarg(setup_root())
-        .' && '.escapeshellarg(PHP_BINARY)
+        .' && '.escapeshellarg(setup_detect_php()['binary'])
         .' artisan '.implode(' ', array_map('escapeshellarg', $arguments))
         .' 2>&1';
 
@@ -262,6 +294,10 @@ $ok = 'background: rgba(16,185,129,.14); color:#34d399; border:1px solid rgba(16
 $bad = 'background: rgba(239,68,68,.14); color:#f87171; border:1px solid rgba(239,68,68,.35)';
 $dim = 'background: rgba(255,255,255,.06); color:#9ca3af; border:1px solid rgba(255,255,255,.14)';
 
+$phpInfo = setup_detect_php();
+$phpOk = version_compare($phpInfo['version'], '8.3', '>=');
+$phpNote = '<div class="row"><span class="st" style="color:'.($phpOk ? '#34d399' : '#f87171').'">'.($phpOk ? '✔' : '✗').'</span><div class="name">PHP CLI for artisan steps: <code>'.setup_h($phpInfo['binary']).'</code> (PHP '.setup_h($phpInfo['version']).')'.($phpOk ? '' : '<span class="detail">Too old for Laravel 13 — install/enable a PHP 8.3+ CLI (Hostinger: hPanel → PHP Configuration, or use php8.3/php8.4).</span>').'</div></div>';
+
 if ($action === 'run') {
     // Prevent two concurrent runs (e.g. double-click) from racing.
     $lockPath = sys_get_temp_dir().'/omnishorts-setup-'.md5(setup_root()).'.lock';
@@ -324,7 +360,7 @@ if ($allSucceeded && $action === 'run') {
         </div>';
 } else {
     $heading = 'Deployment setup';
-    $inner = '<p class="sub">Current state before running:</p>'.$statusHtml
+    $inner = '<p class="sub">Current state before running:</p>'.$phpNote.$statusHtml
         .'<div class="actions">
             <form method="post"><input type="hidden" name="token" value="'.setup_h($givenToken).'"><input type="hidden" name="action" value="run"><button type="submit">⚡ Run deployment setup</button></form>
             <form method="post"><input type="hidden" name="token" value="'.setup_h($givenToken).'"><input type="hidden" name="action" value="delete"><button type="submit" class="danger">Delete setup.php</button></form>

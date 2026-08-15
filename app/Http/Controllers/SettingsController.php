@@ -39,7 +39,9 @@ class SettingsController extends Controller
                 'prune' => Setting::get('cron.last_run.prune') ? Carbon::parse(Setting::get('cron.last_run.prune')) : null,
             ],
             // Exact crontab line to paste on Linux / Hostinger (cPanel Cron Jobs).
-            'cronLine' => '* * * * * cd '.base_path().' && '.PHP_BINARY.' artisan schedule:run >> /dev/null 2>&1',
+            // Uses a detected PHP >= 8.3 binary — the CLI "php" on shared hosts
+            // can be older than the web SAPI and would fail the platform check.
+            'cronLine' => '* * * * * cd '.base_path().' && '.DeployService::phpBinary().' artisan schedule:run >> /dev/null 2>&1',
             // One-click post-deploy setup status.
             'deploy' => $this->deployStatus(),
         ]);

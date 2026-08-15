@@ -105,4 +105,20 @@ class DeploySetupTest extends TestCase
         $response->assertSee('Run Deployment Setup', false);
         $response->assertSee('key:generate', false);
     }
+
+    public function test_php_binary_detection_finds_a_usable_cli(): void
+    {
+        // The detected binary must actually run and report PHP >= 8.3 (the
+        // shared-hosting trap: web SAPI newer than the CLI "php" on PATH).
+        $binary = DeployService::phpBinary();
+        $output = [];
+        exec(escapeshellarg($binary).' -r '.escapeshellarg('echo PHP_VERSION;').' 2>&1', $output);
+        $version = trim((string) ($output[0] ?? ''));
+
+        $this->assertNotSame('', $version, 'Detected binary did not respond: '.$binary);
+        $this->assertTrue(
+            version_compare($version, '8.3', '>='),
+            "Detected binary {$binary} reports PHP {$version} — expected >= 8.3"
+        );
+    }
 }
