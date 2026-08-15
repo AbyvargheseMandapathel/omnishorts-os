@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'google' => [
+        // Sign-in uses Google Identity Services in the browser: client ID only.
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        // YouTube channel connection uses the server-side flow: secret + redirect.
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
+
 ];

@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Video Storage Disk
+    |--------------------------------------------------------------------------
+    |
+    | Where uploaded reel files are stored. Defaults to the local "public"
+    | disk (shared hosting disk). Point it at "ftp" to keep video files off
+    | the web plan's disk — e.g. a separate Hostinger account or VPS.
+    |
+    */
+
+    'video_disk' => env('VIDEO_DISK', 'public'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |
@@ -56,6 +69,27 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        /*
+        | FTP — requires the PHP `ftp` extension (enabled on most shared
+        | hosting, e.g. Hostinger hPanel → PHP Configuration) and the
+        | league/flysystem-ftp package. Set FTP_URL to the public web URL
+        | that maps to FTP_ROOT if the files should be reachable over HTTP.
+        */
+        'ftp' => [
+            'driver' => 'ftp',
+            'host' => env('FTP_HOST'),
+            'username' => env('FTP_USERNAME'),
+            'password' => env('FTP_PASSWORD'),
+            'port' => (int) env('FTP_PORT', 21),
+            'root' => env('FTP_ROOT', '/'),
+            'passive' => env('FTP_PASSIVE', true),
+            'ssl' => env('FTP_SSL', false),
+            'timeout' => (int) env('FTP_TIMEOUT', 90),
+            'url' => env('FTP_URL'),
             'throw' => false,
             'report' => false,
         ],

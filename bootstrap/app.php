@@ -12,7 +12,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'channel.required' => \App\Http\Middleware\EnsureUserHasChannel::class,
+        ]);
+
+        // Hardening headers on every response.
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
+        // HTTPS detection behind a load balancer: trust explicit proxy ranges
+        // (comma-separated in .env). Empty by default = trust nothing.
+        $middleware->trustProxies(
+            at: array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', '')))))
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
