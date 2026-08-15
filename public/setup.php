@@ -94,7 +94,10 @@ function setup_detect_php(): array
 
     $candidates = array_values(array_unique(array_filter([
         PHP_BINARY,
+        PHP_BINDIR.'/php8.4', PHP_BINDIR.'/php84', PHP_BINDIR.'/php8.3', PHP_BINDIR.'/php83', PHP_BINDIR.'/php',
         'php8.4', 'php84', 'php8.3', 'php83', 'php',
+        '/usr/bin/php8.4', '/usr/bin/php8.3', '/usr/bin/lsphp84', '/usr/bin/lsphp83',
+        '/usr/local/bin/php8.4', '/usr/local/bin/php8.3', '/usr/local/lsws/lsphp84/bin/lsphp', '/usr/local/lsws/lsphp83/bin/lsphp',
     ], fn (string $candidate) => $candidate !== '')));
 
     foreach ($candidates as $candidate) {
@@ -350,10 +353,10 @@ if (! empty($results)) {
 
 if ($allSucceeded && $action === 'run') {
     $heading = 'Setup complete';
-    $inner = '<p class="sub" style="color:#34d399">All steps succeeded — <code>public/setup.php</code> has deleted itself. Load your site now.</p>'.$resultsHtml;
+    $inner = '<p class="sub" style="color:#34d399">All steps succeeded — <code>public/setup.php</code> has deleted itself. Load your site now.</p>'.$phpNote.$resultsHtml;
 } elseif (! $allSucceeded && $action === 'run') {
     $heading = 'Setup finished with errors';
-    $inner = '<p class="sub" style="color:#f87171">Not all steps succeeded — the file was kept so you can retry. Fix the failing step(s), then run again.</p>'.$resultsHtml
+    $inner = '<p class="sub" style="color:#f87171">Not all steps succeeded — the file was kept so you can retry. Fix the failing step(s), then run again.</p>'.$phpNote.$resultsHtml
         .'<div class="actions">
             <form method="post"><input type="hidden" name="token" value="'.setup_h($givenToken).'"><input type="hidden" name="action" value="run"><button type="submit">Retry setup</button></form>
             <form method="post"><input type="hidden" name="token" value="'.setup_h($givenToken).'"><input type="hidden" name="action" value="delete"><button type="submit" class="danger">Delete setup.php anyway</button></form>

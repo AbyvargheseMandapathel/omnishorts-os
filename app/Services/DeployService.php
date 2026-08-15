@@ -26,7 +26,10 @@ class DeployService
 
         $candidates = array_values(array_unique(array_filter([
             PHP_BINARY,
+            PHP_BINDIR.'/php8.4', PHP_BINDIR.'/php84', PHP_BINDIR.'/php8.3', PHP_BINDIR.'/php83', PHP_BINDIR.'/php',
             'php8.4', 'php84', 'php8.3', 'php83', 'php',
+            '/usr/bin/php8.4', '/usr/bin/php8.3', '/usr/bin/lsphp84', '/usr/bin/lsphp83',
+            '/usr/local/bin/php8.4', '/usr/local/bin/php8.3', '/usr/local/lsws/lsphp84/bin/lsphp', '/usr/local/lsws/lsphp83/bin/lsphp',
         ], fn (string $candidate) => $candidate !== '')));
 
         foreach ($candidates as $candidate) {
