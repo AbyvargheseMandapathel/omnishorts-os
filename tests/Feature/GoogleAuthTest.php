@@ -21,8 +21,8 @@ class GoogleAuthTest extends TestCase
     private function fakeGoogleJwks(): string
     {
         // Some Windows PHP builds need an explicit openssl.cnf for key generation.
-        $cnf = sys_get_temp_dir() . '/omshorts-openssl.cnf';
-        if (!is_file($cnf)) {
+        $cnf = sys_get_temp_dir().'/omshorts-openssl.cnf';
+        if (! is_file($cnf)) {
             file_put_contents($cnf, "[ req ]\ndistinguished_name = dn\n[ dn ]\n");
         }
 

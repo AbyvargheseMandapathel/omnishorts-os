@@ -76,6 +76,33 @@
         </div>
     </div>
 
+    <div class="stat-card">
+        <div>
+            <div class="stat-label">Total Views</div>
+            <div class="stat-value">{{ $totalViews ? number_format($totalViews) : '—' }}</div>
+            <div class="stat-delta">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                <span>Real stats across {{ $publishedCount }} published reel{{ $publishedCount === 1 ? '' : 's' }}</span>
+            </div>
+        </div>
+        <div class="stat-icon-wrapper" style="color: var(--primary);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </div>
+    </div>
+
+    <div class="stat-card secondary">
+        <div>
+            <div class="stat-label">Total Engagement</div>
+            <div class="stat-value">{{ $totalLikes + $totalComments + $totalShares ? number_format($totalLikes + $totalComments + $totalShares) : '—' }}</div>
+            <div class="stat-delta" style="color: var(--secondary);">
+                <span>{{ number_format($totalLikes) }} likes · {{ number_format($totalComments) }} comments · {{ number_format($totalShares) }} shares</span>
+            </div>
+        </div>
+        <div class="stat-icon-wrapper" style="color: var(--accent-rose);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+        </div>
+    </div>
+
     <div class="stat-card secondary">
         <div>
             <div class="stat-label">YouTube Subscribers</div>
@@ -93,6 +120,7 @@
 <!-- Main 2-Column Content Area -->
 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 28px; align-items: start;">
     <!-- Left Column: Content Pipeline -->
+    <div style="display: flex; flex-direction: column; gap: 24px;">
     <div class="card">
         <div class="card-header">
             <div>
@@ -147,6 +175,69 @@
                 </div>
             @endif
         </div>
+    </div>
+
+    <!-- Performance: real YouTube stats -->
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <h3 class="card-title">Performance</h3>
+                <p class="card-subtitle">Real YouTube stats · refreshed hourly</p>
+            </div>
+        </div>
+        <div class="card-body">
+            @php
+                $curve = $viewsCurve;
+                $maxVal = max($curve ?: [1]) ?: 1;
+                $count = count($curve);
+                $pts = [];
+                foreach ($curve as $i => $v) {
+                    $x = $count <= 1 ? 50 : round($i * (100 / max(1, $count - 1)), 2);
+                    $y = round(26 - ($v / $maxVal) * 22, 2);
+                    $pts[] = $x.','.$y;
+                }
+            @endphp
+            <div style="margin-bottom: 18px;">
+                @if($count > 1)
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                        <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-dim);">Views — last {{ $count }} day{{ $count === 1 ? '' : 's' }}</span>
+                        <span style="font-size: 0.78rem; font-weight: 700; color: var(--primary);">{{ number_format(max($curve)) }} peak</span>
+                    </div>
+                    <svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width: 100%; height: 64px; display: block;">
+                        <polyline points="{{ implode(' ', $pts) }}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+                    </svg>
+                @else
+                    <div style="text-align: center; padding: 28px 12px; border: 1px dashed var(--border-subtle); border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.82rem;">
+                        Growth curve appears once reels have real stats (first hourly refresh after publish).
+                    </div>
+                @endif
+            </div>
+
+            @if($bestPerformers->isNotEmpty())
+                <div style="display: flex; flex-direction: column;">
+                    @foreach($bestPerformers as $i => $pub)
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-subtle);">
+                            <div style="min-width: 0; display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 0.78rem; font-weight: 800; color: var(--text-dim); width: 16px; flex-shrink: 0;">#{{ $i + 1 }}</span>
+                                <div style="min-width: 0;">
+                                    <a href="{{ route('videos.show', $pub->video) }}" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $pub->video->title ?? 'Untitled Short' }}</a>
+                                    <div style="font-size: 0.72rem; color: var(--text-dim);">{{ $pub->socialAccount->account_name ?? 'YouTube' }}</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-shrink: 0; align-items: center;">
+                                <span class="badge" style="background: rgba(16,185,129,0.12); color: #34d399; border: 1px solid rgba(16,185,129,0.25); font-size: 0.7rem;">▶ {{ number_format((int) ($pub->analytics['views'] ?? 0)) }}</span>
+                                <span class="badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim); border: 1px solid var(--border-subtle); font-size: 0.7rem;">♥ {{ number_format((int) ($pub->analytics['likes'] ?? 0)) }}</span>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div style="text-align: center; padding: 20px 12px; color: var(--text-muted); font-size: 0.85rem;">
+                    Published reels rank here by real views once stats arrive.
+                </div>
+            @endif
+        </div>
+    </div>
     </div>
 
     <!-- Right Column -->

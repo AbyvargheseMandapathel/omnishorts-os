@@ -15,13 +15,15 @@ Route::get('/', function () {
     if (auth()->check()) {
         return redirect()->route('dashboard');
     }
+
     return view('landing');
 })->name('home');
 
 // OAuth config health check — exposes the configured client ID / origin and
 // booleans only. Never the client secret. Helps diagnose origin_mismatch /
 // invalid_client without digging into .env.
-Route::get('/health/google', [AuthController::class, 'googleHealth'])->name('health.google');Route::middleware('guest')->group(function () {
+Route::get('/health/google', [AuthController::class, 'googleHealth'])->name('health.google');
+Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 
     // No separate register page — account creation happens through Google sign-in.

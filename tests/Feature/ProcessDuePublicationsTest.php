@@ -64,7 +64,9 @@ class ProcessDuePublicationsTest extends TestCase
         $this->assertSame('published', $due->status);
         $this->assertNotNull($due->published_at);
         $this->assertNotNull($due->post_url);
-        $this->assertNotNull($due->analytics);
+        // No real OAuth credentials in this fixture — simulated publish, so
+        // no fabricated stats either (real ones need the analytics fetch).
+        $this->assertNull($due->analytics);
 
         $this->assertSame('published', $video->refresh()->status);
 
@@ -219,6 +221,9 @@ class ProcessDuePublicationsTest extends TestCase
                 'Location' => 'https://upload.example.com/session',
             ]),
             'upload.example.com/session' => Http::response(['id' => 'VIDEO-X']),
+            'www.googleapis.com/youtube/v3/videos*' => Http::response([
+                'items' => [['id' => 'VIDEO-X', 'statistics' => ['viewCount' => '88', 'likeCount' => '7', 'commentCount' => '3']]],
+            ]),
         ]);
 
         $publication = Publication::create([
@@ -233,6 +238,9 @@ class ProcessDuePublicationsTest extends TestCase
         $this->assertSame('published', $publication->refresh()->status);
         $this->assertStringContainsString('VIDEO-X', $publication->post_url);
         $this->assertSame('connected', $account->refresh()->status);
+
+        // Real stats are fetched right after a successful cron upload.
+        $this->assertSame(88, $publication->analytics['views']);
     }
 
     public function test_dashboard_shows_reconnect_banner_for_expired_account(): void
@@ -359,6 +367,9 @@ class ProcessDuePublicationsTest extends TestCase
                 'Location' => 'https://upload.example.com/session',
             ]),
             'upload.example.com/session' => Http::response(['id' => 'VIDEO-X']),
+            'www.googleapis.com/youtube/v3/videos*' => Http::response([
+                'items' => [['id' => 'VIDEO-X', 'statistics' => ['viewCount' => '5', 'likeCount' => '1', 'commentCount' => '0']]],
+            ]),
         ]);
 
         // 1) Reconnect -> post is re-queued.

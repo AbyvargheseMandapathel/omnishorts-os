@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Publication;
+use App\Models\PublicationMetric;
 use App\Models\Setting;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -44,6 +45,38 @@ class DashboardController extends Controller
 
         $recentVideos = $channel->videos()->latest()->take(6)->get();
 
+        // Real analytics for every published reel of this channel. Values are
+        // fetched from YouTube after upload (analytics:refresh runs hourly)
+        // — never fabricated.
+        $publishedPublications = Publication::with(['video', 'socialAccount'])
+            ->whereHas('video', fn ($q) => $q->where('channel_id', $channel->id))
+            ->where('status', 'published')
+            ->whereNotNull('post_url')
+            ->get();
+
+        $totalViews = (int) $publishedPublications->sum(fn ($p) => (int) ($p->analytics['views'] ?? 0));
+        $totalLikes = (int) $publishedPublications->sum(fn ($p) => (int) ($p->analytics['likes'] ?? 0));
+        $totalComments = (int) $publishedPublications->sum(fn ($p) => (int) ($p->analytics['comments'] ?? 0));
+        $totalShares = (int) $publishedPublications->sum(fn ($p) => (int) ($p->analytics['shares'] ?? 0));
+
+        $bestPerformers = $publishedPublications
+            ->filter(fn ($p) => (int) ($p->analytics['views'] ?? 0) > 0)
+            ->sortByDesc(fn ($p) => (int) $p->analytics['views'])
+            ->take(5)
+            ->values();
+
+        // Growth curve: cumulative views observed per day across this
+        // channel's reels, from the metric snapshot history (last 14 days).
+        $viewsCurve = PublicationMetric::query()
+            ->whereIn('publication_id', $publishedPublications->pluck('id')->all())
+            ->where('fetched_at', '>=', now()->subDays(14))
+            ->orderBy('fetched_at')
+            ->get()
+            ->groupBy(fn ($m) => $m->fetched_at->format('Y-m-d'))
+            ->map(fn ($group) => (int) $group->sum('views'))
+            ->values()
+            ->all();
+
         $upcomingPublications = Publication::with(['video', 'socialAccount'])
             ->whereHas('video', function ($q) use ($channel) {
                 $q->where('channel_id', $channel->id);
@@ -70,6 +103,12 @@ class DashboardController extends Controller
             'youtubeAccounts',
             'reconnectAccounts',
             'totalSubscribers',
+            'totalViews',
+            'totalLikes',
+            'totalComments',
+            'totalShares',
+            'bestPerformers',
+            'viewsCurve',
             'recentVideos',
             'upcomingPublications',
             'allChannels',

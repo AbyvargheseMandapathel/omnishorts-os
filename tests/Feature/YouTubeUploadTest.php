@@ -9,6 +9,7 @@ use App\Models\SocialAccount;
 use App\Models\User;
 use App\Models\Video;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -53,6 +54,11 @@ class YouTubeUploadTest extends TestCase
                 'Location' => 'https://upload.example.com/youtube-session',
             ]),
             'upload.example.com/youtube-session' => Http::response($sessionBody ?? ['id' => 'VIDEO-ABC-123', 'snippet' => ['title' => 'x']]),
+            // Real analytics endpoints used by the post-publish stats fetch.
+            'youtubeanalytics.googleapis.com/v2/reports*' => Http::response(['rows' => [[1500, 200, 40, 18]]]),
+            'www.googleapis.com/youtube/v3/videos*' => Http::response([
+                'items' => [['id' => 'VIDEO-ABC-123', 'statistics' => ['viewCount' => '1500', 'likeCount' => '200', 'commentCount' => '40']]],
+            ]),
         ]);
     }
 
@@ -137,10 +143,64 @@ class YouTubeUploadTest extends TestCase
         $this->assertSame('scheduled', $video->fresh()->status);
     }
 
-    public function test_cron_upload_failure_marks_publication_failed(): void
+    public function test_cron_transient_failure_requeues_with_backoff(): void
     {
         [$user, $channel, $account, $video] = $this->createFixture();
         $this->fakeYouTube(503, ['error' => ['message' => 'Backend Error']]);
+        $this->scheduleDuePublication($channel->id, $account->id, $video->id);
+
+        // A transient failure is re-queued, not killed — the run still succeeds.
+        $this->artisan('publications:process-due')->assertSuccessful();
+
+        $pub = Publication::first();
+        $this->assertSame('scheduled', $pub->status);
+        $this->assertSame(1, $pub->attempt_count);
+        $this->assertNotNull($pub->next_retry_at);
+        $this->assertTrue($pub->next_retry_at->greaterThan(now()));
+        $this->assertSame('connected', $account->fresh()->status);
+        $this->assertSame('scheduled', $video->fresh()->status);
+    }
+
+    public function test_cron_connection_timeout_is_requeued(): void
+    {
+        [$user, $channel, $account, $video] = $this->createFixture();
+        Http::fake([
+            'oauth2.googleapis.com/token' => Http::response([
+                'access_token' => 'fresh-token',
+                'expires_in' => 3600,
+            ]),
+            'www.googleapis.com/upload/youtube/v3/videos*' => Http::response('', 200, [
+                'Location' => 'https://upload.example.com/youtube-session',
+            ]),
+            'upload.example.com/youtube-session' => fn () => throw new ConnectionException('Connection timed out'),
+        ]);
+        $this->scheduleDuePublication($channel->id, $account->id, $video->id);
+
+        $this->artisan('publications:process-due')->assertSuccessful();
+
+        $pub = Publication::first();
+        $this->assertSame('scheduled', $pub->status);
+        $this->assertSame(1, $pub->attempt_count);
+        $this->assertNotNull($pub->next_retry_at);
+    }
+
+    public function test_cron_gives_up_after_max_attempts(): void
+    {
+        [$user, $channel, $account, $video] = $this->createFixture();
+        $this->scheduleDuePublication($channel->id, $account->id, $video->id);
+        Publication::first()->update(['attempt_count' => 5]);
+        $this->fakeYouTube(503, ['error' => ['message' => 'Backend Error']]);
+
+        $this->artisan('publications:process-due')->assertFailed();
+
+        $pub = Publication::first();
+        $this->assertSame('failed', $pub->status);
+    }
+
+    public function test_cron_permanent_failure_marks_publication_failed(): void
+    {
+        [$user, $channel, $account, $video] = $this->createFixture();
+        $this->fakeYouTube(403, ['error' => ['message' => 'Forbidden']]);
         $this->scheduleDuePublication($channel->id, $account->id, $video->id);
 
         $this->artisan('publications:process-due')->assertFailed();
@@ -150,6 +210,24 @@ class YouTubeUploadTest extends TestCase
         $this->assertFalse($pub->retry_on_reconnect);
         $this->assertSame('connected', $account->fresh()->status);
         $this->assertSame('scheduled', $video->fresh()->status);
+    }
+
+    public function test_cron_success_resets_retry_state(): void
+    {
+        [$user, $channel, $account, $video] = $this->createFixture();
+        $this->scheduleDuePublication($channel->id, $account->id, $video->id);
+        Publication::first()->update([
+            'attempt_count' => 3,
+            'next_retry_at' => now()->subMinute(),
+        ]);
+        $this->fakeYouTube();
+
+        $this->artisan('publications:process-due')->assertSuccessful();
+
+        $pub = Publication::first();
+        $this->assertSame('published', $pub->status);
+        $this->assertSame(0, $pub->attempt_count);
+        $this->assertNull($pub->next_retry_at);
     }
 
     public function test_cron_keeps_simulated_publish_without_credentials(): void
@@ -236,6 +314,14 @@ class YouTubeUploadTest extends TestCase
         $pub = Publication::where('video_id', $video->id)->first();
         $this->assertSame('https://www.youtube.com/watch?v=VIDEO-ABC-123', $pub->post_url);
         $this->assertSame('Manual Publish Title', $pub->custom_title);
+
+        // Real stats are fetched right after a real upload — never fabricated.
+        $this->assertSame(1500, $pub->analytics['views']);
+        $this->assertDatabaseHas('publication_metrics', [
+            'publication_id' => $pub->id,
+            'views' => 1500,
+            'likes' => 200,
+        ]);
     }
 
     public function test_manual_publish_now_stays_simulated_without_credentials(): void

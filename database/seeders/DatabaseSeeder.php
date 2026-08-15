@@ -132,7 +132,7 @@ class DatabaseSeeder extends Seeder
                     'scheduled_at' => Carbon::now()->subDays($vData['published_days_ago'])->setHour(18)->setMinute(0),
                     'published_at' => Carbon::now()->subDays($vData['published_days_ago'])->setHour(18)->setMinute(1),
                     'status' => 'published',
-                    'post_url' => 'https://youtube.com/shorts/demo' . rand(1000, 9999),
+                    'post_url' => 'https://youtube.com/shorts/demo'.rand(1000, 9999),
                     'analytics' => ['views' => rand(12000, 96000), 'likes' => rand(900, 8200), 'comments' => rand(80, 900), 'shares' => rand(60, 1200)],
                 ]);
             } elseif ($vData['status'] === 'scheduled') {

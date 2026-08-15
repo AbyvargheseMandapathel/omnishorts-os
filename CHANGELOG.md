@@ -15,6 +15,8 @@
 * SQLite lock fix: the publish cron no longer wraps long Gemini/YouTube HTTP calls in a DB transaction (only the short final state update is transactional), and SQLite runs in WAL mode with a 10s busy timeout — web requests no longer hit "database is locked" while the cron uploads. Both guards are SQLite-only, so MySQL production is untouched
 * YouTube uploads are always marked `madeForKids: false` (never made for kids)
 * Content Library cards play reels inline — click the play button to start, click the video to pause/resume, and controls return when it ends; falls back to the mockup when no file is present
+* Real YouTube analytics: published reels get actual views/likes/comments/shares fetched from the YouTube Analytics API (videos.list fallback) right after upload and then hourly via the new `analytics:refresh` command; the dashboard shows real totals, a 14-day views growth curve, and per-channel best performers. Fabricated numbers are gone — simulated/dev publishes simply show no stats until real ones arrive
+* Auto-retry failed uploads: transient YouTube failures (quota, 5xx, 429, timeouts, network) are re-queued with exponential backoff (5→80 min, up to 5 attempts) instead of killing the post; permanent failures (invalid grant, forbidden) still mark the post failed. Retry state lives in `attempt_count`/`next_retry_at` on publications
 
 ## [v13.9.0](https://github.com/laravel/laravel/compare/v13.8.0...v13.9.0) - 2026-08-12
 
