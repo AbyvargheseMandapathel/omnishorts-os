@@ -16,8 +16,9 @@ DirectoryIndex index.php
     RewriteCond %{REQUEST_FILENAME} -f
     RewriteRule ^ - [L]
 
-    # Allow /videos/ directory to be served directly (FTP video disk)
-    RewriteRule ^videos/ - [L]
+    # Serve actual video files from /videos/ directory (FTP video disk)
+    RewriteCond %{DOCUMENT_ROOT}/videos%{REQUEST_URI} -f
+    RewriteRule ^videos/.+\..+$ - [L]
 
     # Everything else → public/
     RewriteCond %{REQUEST_URI} !^/public
