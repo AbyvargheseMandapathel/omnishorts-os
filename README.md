@@ -5,6 +5,7 @@ OmniShorts is a modern, full-stack content operating system built for digital cr
 ## ✨ Key Features
 
 - 🎯 **Multi-Channel Management:** Switch seamlessly between distinct channel brands, niches, and linked social accounts.
+- 🎬 **AI Video Generator:** Upload a rights-confirmed background video + a topic, and the pipeline generates the whole reel — structured script (narration + per-scene image prompts), scene images, narration audio with sentence timing, SRT captions, scene sync, and an FFmpeg render (background looped/trimmed to narration length, images overlaid at their narration timings, original audio muted/ducked/reduced). Every stage is retryable without redoing successful work, you can edit narration/prompts and regenerate per scene, and approving the final MP4 drops it straight into the Content Library for the normal scheduling/publishing flow. Providers come from **Settings → AI Connections** (one encrypted key per provider, reused across content types) + **Settings → Content Type AI** (primary/fallback per content type, automatic fallback on timeouts/rate limits).
 - ⚡ **AI Viral Studio:** Generate high-retention 3-second opening hooks, virality scores, and multi-platform SEO captions with GPT/Gemini algorithms. Per-channel override — one channel can auto-analyze every upload with Gemini while another uploads with plain metadata.
 - 📅 **Interactive Visual Calendar:** Visual 7-day scheduling grid with drag-and-drop rescheduling and unscheduled video tray.
 - ⏱️ **Cron Jobs Manager (Settings):** master + per-job enable/disable for auto-publish, analytics refresh, and file pruning; Install/Sync and Uninstall for the OS entry (Windows Task or crontab), plus the exact Hostinger/cPanel crontab line. Manual runs keep working when automatic jobs are paused.
@@ -21,7 +22,8 @@ OmniShorts is a modern, full-stack content operating system built for digital cr
 - **Backend:** Laravel 13 / PHP 8.3+
 - **Frontend:** Blade Templates & Custom Vanilla CSS Design System (Obsidian Dark Theme)
 - **Database:** SQLite / MySQL / PostgreSQL
-- **APIs:** Google Identity Services & YouTube Data API v3
+- **APIs:** Google Identity Services & YouTube Data API v3, Groq / OpenAI / Gemini (text + image), Hugging Face, Pollinations (text + image + voice), ElevenLabs, Edge TTS
+- **Rendering:** FFmpeg (required for the AI video render stage; set `FFMPEG_BINARY` if it isn't on PATH)
 
 ## 🚀 Deploying to Hostinger (shared hosting)
 
@@ -35,6 +37,14 @@ The repo ships with a root `.htaccess` that routes every request into `public/`,
 6. **Cron:** Settings → Scheduler & Cron Jobs shows the exact crontab line for this server (real PHP/artisan paths) — paste it into hPanel → Cron Jobs.
 
 > If you prefer the cleaner layout, set the document root to `public_html/public` in hPanel and delete the root `.htaccess`.
+
+### Setting up AI Video generation
+
+1. **Settings → AI Connections** — add one connection per provider you want (Text: Groq/OpenAI/Gemini/Pollinations; Image: Hugging Face FLUX/OpenAI/Pollinations; Voice: ElevenLabs/Edge TTS/Pollinations). Keys are encrypted and never shown again. Tick the content types (video, shorts, …) each connection should power. Pollinations needs one `sk_` key (enter.pollinations.ai) and covers all three kinds — its gateway base URL is applied automatically. **Edge TTS needs no key at all** — leave the API Key field blank; it speaks to Microsoft's free TTS endpoint directly. Set the voice via the connection's JSON config, e.g. `{"voice":"hi-IN-MadhurNeural"}`.
+2. **Settings → Content Type AI** — for each content type pick the primary (and optional fallback) text/image/voice connections. Only connections assigned to that content type appear. Fallbacks are tried automatically on timeouts/rate limits/provider errors. Shortcut: `php artisan ai:setup-defaults --user=you@example.com` wires Groq (text) / Pollinations (image) / Edge TTS (voice) into every content type in one run — it reuses and corrects existing connections, so keys you already saved stay put.
+3. **Install FFmpeg** (or set `FFMPEG_BINARY`) — required for the render stage. The rest of the app works without it.
+4. **Create AI Video** from the sidebar — upload the background, enter the topic, pick scenes/language/tone, confirm you have the rights, and Generate. Progress updates live on the job page; the `ai:process-jobs` command (already in the scheduler) drives the pipeline.
+5. **Daily Auto-Generation** (Settings → Daily Auto-Generation) — hands-free: every day at the set time the app picks the next topic from your pool (or has the text AI propose one), generates the full reel, and drops it into the Content Library automatically. Uses your configured background video when you provide one — otherwise it generates a black 720×1280 background itself. Once a day, no manual steps; `php artisan ai:generate-daily --force` runs it on demand.
 
 ### Troubleshooting: 500 error right after deploy
 

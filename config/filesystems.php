@@ -60,6 +60,18 @@ return [
             'report' => false,
         ],
 
+        /*
+        | AI pipeline working files — scene images, narration audio, SRT, and
+        | render intermediates. Private (not web-served); failures throw so a
+        | broken disk is loud instead of silently producing file-less output.
+        */
+        'ai' => [
+            'driver' => 'local',
+            'root' => storage_path('app/ai'),
+            'throw' => true,
+            'report' => true,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

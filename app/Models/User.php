@@ -39,6 +39,11 @@ class User extends Authenticatable
         return $this->hasMany(Channel::class);
     }
 
+    public function aiConnections(): HasMany
+    {
+        return $this->hasMany(AiConnection::class);
+    }
+
     public function currentChannel(): ?Channel
     {
         $channelId = session('active_channel_id');

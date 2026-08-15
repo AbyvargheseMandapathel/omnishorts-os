@@ -211,6 +211,10 @@
             </div>
         </div>
     </div>
+
+    @include('settings.partials.ai-connections')
+    @include('settings.partials.content-type-ai')
+    @include('settings.partials.daily-auto-generation')
 </div>
 
     <!-- Deployment & Setup -->
@@ -291,4 +295,5 @@
 
 @push('scripts')
 <script src="{{ asset('js/settings.js') }}"></script>
+<script src="{{ asset('js/ai.js') }}?v={{ time() }}"></script>
 @endpush

@@ -24,6 +24,20 @@ Schedule::command('publications:process-due')
     ->withoutOverlapping()
     ->when(fn () => Setting::get('cron.enabled', '1') === '1' && Setting::get('cron.publish_enabled', '1') === '1');
 
+// AI video generation pipeline — one queued job per tick (jobs are long).
+Schedule::command('ai:process-jobs')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->when(fn () => Setting::get('cron.enabled', '1') === '1');
+
+// Hands-free daily AI video: picks the day's topic, generates the whole reel
+// (black background when none is configured), and auto-approves it into the
+// Content Library. Internal guards run it at most once per day.
+Schedule::command('ai:generate-daily')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->when(fn () => Setting::get('cron.enabled', '1') === '1');
+
 // Keep the hosting disk bounded: drop video files that are no longer needed.
 Schedule::command('videos:prune-files')
     ->daily()

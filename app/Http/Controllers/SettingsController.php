@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AiConnection;
+use App\Models\AiContentTypeConfig;
 use App\Models\Setting;
+use App\Services\Ai\ConnectionTester;
 use App\Services\DeployService;
 use App\Services\GeminiVideoAnalyzer;
 use Carbon\Carbon;
@@ -44,7 +47,172 @@ class SettingsController extends Controller
             'cronLine' => '* * * * * cd '.base_path().' && '.DeployService::phpBinary().' artisan schedule:run >> /dev/null 2>&1',
             // One-click post-deploy setup status.
             'deploy' => $this->deployStatus(),
+            // AI Connections + per content-type provider config.
+            'aiConnections' => Auth::user()->aiConnections()->with('contentTypeAssignments')->orderBy('name')->get(),
+            'aiContentTypes' => config('ai.content_types'),
+            'aiProviders' => config('ai.providers'),
+            'aiRoles' => config('ai.roles'),
+            'aiContentTypeConfigs' => AiContentTypeConfig::query()
+                ->where('user_id', Auth::id())
+                ->with('aiConnection')
+                ->get()
+                ->keyBy(fn ($c) => $c->content_type.':'.$c->role),
+            'aiDefaultConfigs' => config('ai.defaults'),
+            // Daily Auto-Generation settings + last run/error state.
+            'aiDaily' => [
+                'enabled' => Setting::get('ai.daily.enabled', '0') === '1',
+                'time' => (string) (Setting::get('ai.daily.time') ?: config('ai.daily.time', '06:00')),
+                'content_type' => (string) (Setting::get('ai.daily.content_type') ?: config('ai.daily.content_type', 'video')),
+                'topics' => (string) Setting::get('ai.daily.topics', ''),
+                'background_path' => (string) Setting::get('ai.daily.background_path', ''),
+                'auto_approve' => Setting::get('ai.daily.auto_approve', '1') === '1',
+                'last_run' => Setting::get('ai.daily.last_run') ?: null,
+                'last_error' => Setting::get('ai.daily.last_error') ?: null,
+            ],
         ]);
+    }
+
+    /**
+     * Save the Daily Auto-Generation settings (topic pool, schedule, background,
+     * auto-approve). The ai:generate-daily command reads these on every tick.
+     */
+    public function saveAiDaily(Request $request)
+    {
+        $validated = $request->validate([
+            'enabled' => ['nullable', 'boolean'],
+            'time' => ['required', 'date_format:H:i'],
+            'content_type' => ['required', 'in:'.implode(',', config('ai.content_types'))],
+            'topics' => ['nullable', 'string', 'max:4000'],
+            'background_path' => ['nullable', 'string', 'max:300'],
+            'auto_approve' => ['nullable', 'boolean'],
+        ]);
+
+        Setting::set('ai.daily.enabled', $request->boolean('enabled') ? '1' : '0');
+        Setting::set('ai.daily.time', $validated['time']);
+        Setting::set('ai.daily.content_type', $validated['content_type']);
+        Setting::set('ai.daily.topics', trim((string) ($validated['topics'] ?? '')));
+        Setting::set('ai.daily.background_path', trim((string) ($validated['background_path'] ?? '')));
+        Setting::set('ai.daily.auto_approve', $request->boolean('auto_approve') ? '1' : '0');
+
+        return back()->with('success', 'Daily Auto-Generation settings saved.');
+    }
+
+    /**
+     * Create or update an AI connection. The API key is only written when a
+     * new value is typed — blank keeps the saved (encrypted) one.
+     */
+    public function saveAiConnection(Request $request)
+    {
+        $validated = $request->validate([
+            'id' => ['nullable', 'integer'],
+            'name' => ['required', 'string', 'max:120'],
+            'type' => ['required', 'in:'.implode(',', AiConnection::TYPES)],
+            'provider' => ['required', 'string'],
+            'api_key' => ['nullable', 'string', 'max:2000'],
+            'model' => ['nullable', 'string', 'max:255'],
+            'base_url' => ['nullable', 'url', 'max:500'],
+            'config' => ['nullable', 'string'],
+            'content_types' => ['nullable', 'array'],
+            'content_types.*' => ['in:'.implode(',', config('ai.content_types'))],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $providerType = config("ai.providers.{$validated['provider']}.type");
+        if (! $providerType || $providerType !== $validated['type']) {
+            return back()->withErrors(['provider' => 'The selected provider does not match the chosen AI type.'])->withInput();
+        }
+
+        // Additional config must be valid JSON when provided.
+        $extra = null;
+        if (filled($validated['config'] ?? null)) {
+            $decoded = json_decode($validated['config'], true);
+            if (! is_array($decoded)) {
+                return back()->withErrors(['config' => 'Additional configuration must be valid JSON (e.g. {"voice":"en-US-ChristopherNeural"}).'])->withInput();
+            }
+            $extra = $decoded;
+        }
+
+        $connection = filled($validated['id'] ?? null)
+            ? Auth::user()->aiConnections()->findOrFail($validated['id'])
+            : new AiConnection(['user_id' => Auth::id()]);
+
+        $connection->fill([
+            'name' => $validated['name'],
+            'type' => $validated['type'],
+            'provider' => $validated['provider'],
+            'model' => $validated['model'] ?? null,
+            'base_url' => $validated['base_url'] ?? null,
+            'config' => $extra,
+            'is_active' => $request->boolean('is_active'),
+        ]);
+
+        // API key: only overwritten when a real value is typed; the "remove"
+        // checkbox clears it explicitly.
+        if (filled($validated['api_key'] ?? null)) {
+            $connection->api_key = $validated['api_key'];
+        } elseif ($request->boolean('remove_api_key')) {
+            $connection->api_key = null;
+        }
+
+        $connection->save();
+        $connection->syncContentTypes($validated['content_types'] ?? []);
+
+        return back()->with('success', "AI connection '{$connection->name}' saved.");
+    }
+
+    public function deleteAiConnection(Request $request, AiConnection $connection)
+    {
+        abort_unless($connection->user_id === Auth::id(), 403);
+
+        $name = $connection->name;
+        $connection->delete();
+
+        return back()->with('success', "AI connection '{$name}' deleted.");
+    }
+
+    /**
+     * Save the per content-type primary/fallback provider selection. Only
+     * connections the user owns are accepted.
+     */
+    public function saveAiContentTypeConfig(Request $request)
+    {
+        $contentTypes = config('ai.content_types');
+        $roles = config('ai.roles');
+
+        $validated = $request->validate([
+            'configs' => ['nullable', 'array'],
+            'configs.*.*' => ['nullable', 'integer'],
+        ]);
+
+        $owned = Auth::user()->aiConnections()->pluck('id')->all();
+
+        foreach ($contentTypes as $contentType) {
+            foreach ($roles as $role) {
+                $connectionId = $validated['configs'][$contentType][$role] ?? null;
+                $key = [$contentType, $role];
+
+                if (! $connectionId) {
+                    AiContentTypeConfig::query()
+                        ->where('user_id', Auth::id())
+                        ->where('content_type', $contentType)
+                        ->where('role', $role)
+                        ->delete();
+
+                    continue;
+                }
+
+                if (! in_array((int) $connectionId, $owned, true)) {
+                    continue;
+                }
+
+                AiContentTypeConfig::updateOrCreate(
+                    ['user_id' => Auth::id(), 'content_type' => $contentType, 'role' => $role],
+                    ['ai_connection_id' => (int) $connectionId]
+                );
+            }
+        }
+
+        return back()->with('success', 'Content Type AI configuration saved.');
     }
 
     /**
@@ -208,5 +376,61 @@ class SettingsController extends Controller
     public function testGemini()
     {
         return response()->json(app(GeminiVideoAnalyzer::class)->testConnection());
+    }
+
+    /**
+     * Test an AI connection before saving it: builds the provider from the
+     * form fields (an existing connection's saved key is used when the key
+     * field is blank) and fires a tiny real request. Returns JSON
+     * {ok: bool, message: string} — never echoes the key.
+     */
+    public function testAiConnection(Request $request)
+    {
+        $validated = $request->validate([
+            'id' => ['nullable', 'integer'],
+            'type' => ['required', 'in:text,image,voice'],
+            'provider' => ['required', 'string', 'max:100'],
+            'api_key' => ['nullable', 'string', 'max:2000'],
+            'model' => ['nullable', 'string', 'max:200'],
+            'base_url' => ['nullable', 'url', 'max:300'],
+            'config' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $entry = config("ai.providers.{$validated['provider']}");
+        if (! is_array($entry) || ($entry['type'] ?? null) !== $validated['type']) {
+            return response()->json(['ok' => false, 'message' => 'Unknown provider or type mismatch.'], 422);
+        }
+
+        $saved = null;
+        if (filled($validated['id'] ?? null)) {
+            $saved = AiConnection::where('user_id', Auth::id())->find((int) $validated['id']);
+            if (! $saved) {
+                return response()->json(['ok' => false, 'message' => 'Connection not found.'], 404);
+            }
+        }
+
+        $config = null;
+        if (filled($validated['config'] ?? null)) {
+            $config = json_decode((string) $validated['config'], true);
+            if (! is_array($config)) {
+                return response()->json(['ok' => false, 'message' => 'Additional configuration must be valid JSON.'], 422);
+            }
+        }
+
+        $connection = $saved ?? new AiConnection;
+        $connection->user_id = Auth::id();
+        $connection->is_active = true;
+        $connection->type = $validated['type'];
+        $connection->provider = $validated['provider'];
+        $connection->model = filled($validated['model'] ?? null) ? $validated['model'] : $saved?->model;
+        $connection->base_url = filled($validated['base_url'] ?? null) ? $validated['base_url'] : $saved?->base_url;
+        $connection->config = $config ?? $saved?->config;
+
+        // Typed key wins; blank falls back to the saved key (Edge TTS needs none).
+        $connection->api_key = filled($validated['api_key'] ?? null)
+            ? $validated['api_key']
+            : $saved?->api_key;
+
+        return response()->json(app(ConnectionTester::class)->test($connection));
     }
 }

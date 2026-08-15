@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiVideoController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\ChannelController;
@@ -98,8 +99,29 @@ Route::middleware(['auth', 'channel.required', 'throttle:60,1'])->group(function
     Route::post('/calendar/publications/{publication}/move', [CalendarController::class, 'move'])->name('calendar.publication.move');
     Route::post('/calendar/schedule', [CalendarController::class, 'schedule'])->name('calendar.schedule');
 
+    // AI Video Generator
+    Route::prefix('ai')->name('ai.')->group(function () {
+        Route::get('/videos', [AiVideoController::class, 'index'])->name('videos.index');
+        Route::get('/videos/create', [AiVideoController::class, 'create'])->name('videos.create');
+        Route::post('/videos', [AiVideoController::class, 'store'])->name('videos.store');
+        Route::get('/videos/{job}', [AiVideoController::class, 'show'])->name('videos.show');
+        Route::get('/videos/{job}/progress', [AiVideoController::class, 'progress'])->name('videos.progress');
+        Route::get('/videos/{job}/edit', [AiVideoController::class, 'edit'])->name('videos.edit');
+        Route::put('/videos/{job}', [AiVideoController::class, 'saveEdit'])->name('videos.update');
+        Route::post('/videos/{job}/retry/{stage}', [AiVideoController::class, 'retry'])->name('videos.retry');
+        Route::post('/videos/{job}/scenes/{sceneNumber}/regenerate', [AiVideoController::class, 'regenerateScene'])->name('videos.scenes.regenerate');
+        Route::post('/videos/{job}/cancel', [AiVideoController::class, 'cancel'])->name('videos.cancel');
+        Route::post('/videos/{job}/approve', [AiVideoController::class, 'approve'])->name('videos.approve');
+        Route::get('/videos/{job}/images/{sceneNumber}', [AiVideoController::class, 'image'])->name('videos.image');
+    });
+
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::post('/settings/ai/connections', [SettingsController::class, 'saveAiConnection'])->name('settings.ai.connections.save');
+    Route::post('/settings/ai/connections/test', [SettingsController::class, 'testAiConnection'])->name('settings.ai.connections.test');
+    Route::delete('/settings/ai/connections/{connection}', [SettingsController::class, 'deleteAiConnection'])->name('settings.ai.connections.delete');
+    Route::post('/settings/ai/content-types', [SettingsController::class, 'saveAiContentTypeConfig'])->name('settings.ai.content-types.save');
+    Route::post('/settings/ai/daily', [SettingsController::class, 'saveAiDaily'])->name('settings.ai.daily.save');
     Route::post('/settings/gemini', [SettingsController::class, 'saveGemini'])->name('settings.gemini.save');
     Route::post('/settings/gemini/test', [SettingsController::class, 'testGemini'])->name('settings.gemini.test');
     Route::post('/settings/cron', [SettingsController::class, 'saveCron'])->name('settings.cron.save');
