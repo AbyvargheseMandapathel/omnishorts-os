@@ -45,13 +45,13 @@ class DashboardController extends Controller
 
         $recentVideos = $channel->videos()->latest()->take(6)->get();
 
-        // Real analytics for every published reel of this channel. Values are
-        // fetched from YouTube after upload (analytics:refresh runs hourly)
-        // — never fabricated.
+        // Real analytics for every published reel of this channel. Only
+        // publications with a real YouTube watch URL count — simulated/demo
+        // URLs can never carry real numbers, so they are excluded entirely.
         $publishedPublications = Publication::with(['video', 'socialAccount'])
             ->whereHas('video', fn ($q) => $q->where('channel_id', $channel->id))
             ->where('status', 'published')
-            ->whereNotNull('post_url')
+            ->where('post_url', 'like', '%youtube.com/watch?v=%')
             ->get();
 
         $totalViews = (int) $publishedPublications->sum(fn ($p) => (int) ($p->analytics['views'] ?? 0));
@@ -94,6 +94,10 @@ class DashboardController extends Controller
         $lastCronCheckAt = $lastCronCheck ? Carbon::parse($lastCronCheck) : null;
         $cronHealthy = $lastCronCheckAt !== null && $lastCronCheckAt->greaterThanOrEqualTo(now()->subMinutes(10));
 
+        // Jobs can be paused from Settings — surface that instead of the
+        // running/stale state so it is never mistaken for a broken cron.
+        $cronDisabled = Setting::get('cron.enabled', '1') === '0';
+
         return view('dashboard.index', compact(
             'channel',
             'totalVideos',
@@ -113,8 +117,26 @@ class DashboardController extends Controller
             'upcomingPublications',
             'allChannels',
             'lastCronCheckAt',
-            'cronHealthy'
+            'cronHealthy',
+            'cronDisabled'
         ));
+    }
+
+    /**
+     * Refresh all real YouTube stats on demand: runs the same analytics
+     * command the scheduler uses twice daily (publication stats + subscriber
+     * counts).
+     */
+    public function refreshAnalytics()
+    {
+        $exitCode = Artisan::call('analytics:refresh');
+        $output = trim(Artisan::output());
+
+        if ($exitCode === 0) {
+            return back()->with('success', $output ?: 'Analytics refreshed.');
+        }
+
+        return back()->with('error', $output ?: 'Analytics refresh failed.');
     }
 
     /**

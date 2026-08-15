@@ -262,6 +262,98 @@ class GeminiAnalysisTest extends TestCase
         $this->assertSame('none', $video->fresh()->analysis_status);
     }
 
+    public function test_analyzer_enabled_resolves_per_channel_override(): void
+    {
+        [$user, $channel] = $this->createUserWithChannelAndYoutube();
+        Setting::set('gemini.enabled', '1');
+
+        // No override -> global wins.
+        $this->assertTrue(app(GeminiVideoAnalyzer::class)->enabled($channel));
+        $this->assertTrue(app(GeminiVideoAnalyzer::class)->enabled());
+
+        // Channel forced off -> skipped even though global is on.
+        $channel->update(['gemini_enabled' => false]);
+        $this->assertFalse(app(GeminiVideoAnalyzer::class)->enabled($channel));
+        $this->assertTrue(app(GeminiVideoAnalyzer::class)->enabled());
+
+        // Channel forced on -> used even though global is off.
+        Setting::set('gemini.enabled', '0');
+        $channel->update(['gemini_enabled' => true]);
+        $this->assertTrue(app(GeminiVideoAnalyzer::class)->enabled($channel));
+        $this->assertFalse(app(GeminiVideoAnalyzer::class)->enabled());
+
+        // Back to default -> follows global again.
+        $channel->update(['gemini_enabled' => null]);
+        $this->assertFalse(app(GeminiVideoAnalyzer::class)->enabled($channel));
+    }
+
+    public function test_settings_save_persists_channel_overrides(): void
+    {
+        [$user, $channel] = $this->createUserWithChannelAndYoutube();
+
+        $this->actingAs($user)->post(route('settings.gemini.save'), [
+            'enabled' => '1',
+            'model' => 'gemini-1.5-flash',
+            'channel_overrides' => [(string) $channel->id => 'disabled'],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertFalse($channel->fresh()->gemini_enabled);
+
+        $this->actingAs($user)->post(route('settings.gemini.save'), [
+            'enabled' => '1',
+            'model' => 'gemini-1.5-flash',
+            'channel_overrides' => [(string) $channel->id => 'enabled'],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertTrue($channel->fresh()->gemini_enabled);
+
+        $this->actingAs($user)->post(route('settings.gemini.save'), [
+            'enabled' => '1',
+            'model' => 'gemini-1.5-flash',
+            'channel_overrides' => [(string) $channel->id => 'default'],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull($channel->fresh()->gemini_enabled);
+    }
+
+    public function test_cron_skips_gemini_for_channel_with_disabled_override(): void
+    {
+        [$user, $channel, $account] = $this->createUserWithChannelAndYoutube();
+        $this->enableGemini();
+        $channel->update(['gemini_enabled' => false]);
+        $this->fakeGemini();
+        $video = $this->createVideoWithFile($channel->id, 'Original Title');
+        $this->scheduleDuePublication($channel->id, $account->id, $video->id);
+
+        $this->artisan('publications:process-due')->assertExitCode(0);
+
+        // Gemini never called: existing metadata used, status untouched.
+        $pub = Publication::first();
+        $this->assertSame('published', $pub->status);
+        $this->assertSame('Original Title', $pub->custom_title);
+        $this->assertSame('none', $video->fresh()->analysis_status);
+        Http::assertNothingSent();
+    }
+
+    public function test_cron_uses_gemini_for_channel_with_enabled_override_when_global_off(): void
+    {
+        [$user, $channel, $account] = $this->createUserWithChannelAndYoutube();
+        Setting::set('gemini.enabled', '0');
+        Setting::set('gemini.model', 'gemini-1.5-flash');
+        Setting::set('gemini.api_key', Crypt::encryptString('AIza-test-key'));
+        $channel->update(['gemini_enabled' => true]);
+        $this->fakeGemini();
+        $video = $this->createVideoWithFile($channel->id, 'Original Title');
+        $this->scheduleDuePublication($channel->id, $account->id, $video->id);
+
+        $this->artisan('publications:process-due')->assertExitCode(0);
+
+        $pub = Publication::first();
+        $this->assertSame('published', $pub->status);
+        $this->assertSame(self::ANALYSIS['title'], $pub->custom_title);
+        $this->assertSame('completed', $video->fresh()->analysis_status);
+    }
+
     public function test_cron_uses_ai_metadata_when_enabled(): void
     {
         [$user, $channel, $account] = $this->createUserWithChannelAndYoutube();

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Channel;
 use App\Models\Setting;
 use App\Models\Video;
 use Illuminate\Support\Facades\Crypt;
@@ -64,10 +65,16 @@ Return ONLY valid JSON in exactly this shape:
 PROMPT;
 
     /**
-     * Whether Gemini analysis is enabled in settings.
+     * Whether Gemini analysis is enabled. Pass the video's channel to honor
+     * its per-channel override (null = unset -> global setting); without a
+     * channel the global Settings toggle decides.
      */
-    public function enabled(): bool
+    public function enabled(?Channel $channel = null): bool
     {
+        if ($channel) {
+            return $channel->geminiAnalysisEnabled();
+        }
+
         return Setting::get('gemini.enabled') === '1';
     }
 
@@ -131,7 +138,9 @@ PROMPT;
      */
     public function analyze(Video $video): ?array
     {
-        if (! $this->enabled()) {
+        // A video always belongs to a channel, so the per-channel override
+        // (or the global setting when unset) decides here too.
+        if (! $this->enabled($video->channel)) {
             return null;
         }
 

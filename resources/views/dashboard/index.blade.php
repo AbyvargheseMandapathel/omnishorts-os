@@ -108,7 +108,7 @@
             <div class="stat-label">YouTube Subscribers</div>
             <div class="stat-value">{{ $totalSubscribers ? number_format($totalSubscribers) : '—' }}</div>
             <div class="stat-delta" style="color: var(--secondary);">
-                <span>{{ $youtubeAccounts->count() }} connected channel{{ $youtubeAccounts->count() === 1 ? '' : 's' }}</span>
+                <span>Refreshed twice daily from YouTube</span>
             </div>
         </div>
         <div class="stat-icon-wrapper" style="color: var(--accent-rose);">
@@ -146,7 +146,7 @@
                             <div style="display: flex; align-items: center; gap: 16px; min-width: 0;">
                                 <div style="width: 44px; height: 64px; border-radius: 8px; background: linear-gradient(180deg, #141417, #0b0b0d); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; position: relative;">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="white" opacity="0.8"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                                    <span style="position: absolute; bottom: 2px; font-size: 0.65rem; color: #cbd5e1; font-weight: 700;">{{ $video->duration }}s</span>
+                                    <span style="position: absolute; bottom: 2px; font-size: 0.65rem; color: #cbd5e1; font-weight: 700;">@if($video->duration){{ $video->duration }}s@else—@endif</span>
                                 </div>
                                 <div style="min-width: 0;">
                                     <a href="{{ route('videos.show', $video) }}" style="font-weight: 600; font-size: 0.95rem; color: var(--text-main); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
@@ -182,8 +182,12 @@
         <div class="card-header">
             <div>
                 <h3 class="card-title">Performance</h3>
-                <p class="card-subtitle">Real YouTube stats · refreshed hourly</p>
+                <p class="card-subtitle">Real YouTube stats · refreshed twice daily</p>
             </div>
+            <form method="POST" action="{{ route('dashboard.analytics.refresh') }}">
+                @csrf
+                <button type="submit" class="btn btn-secondary btn-sm">↻ Refresh All</button>
+            </form>
         </div>
         <div class="card-body">
             @php
@@ -208,7 +212,7 @@
                     </svg>
                 @else
                     <div style="text-align: center; padding: 28px 12px; border: 1px dashed var(--border-subtle); border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.82rem;">
-                        Growth curve appears once reels have real stats (first hourly refresh after publish).
+                        Growth curve appears once reels have real stats (first refresh after publish).
                     </div>
                 @endif
             </div>
@@ -249,7 +253,9 @@
                     <h3 class="card-title">Scheduler</h3>
                     <p class="card-subtitle">Auto-publish cron health</p>
                 </div>
-                @if($cronHealthy)
+                @if($cronDisabled)
+                    <span class="badge" style="background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3);">○ Disabled</span>
+                @elseif($cronHealthy)
                     <span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3);">● Running</span>
                 @elseif($lastCronCheckAt)
                     <span class="badge" style="background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.3);">● Not running</span>
@@ -272,7 +278,11 @@
                         <strong>{{ $scheduledCount }}</strong>
                     </div>
                 </div>
-                @if(!$cronHealthy)
+                @if($cronDisabled)
+                    <div style="font-size: 0.75rem; color: #fbbf24; margin-top: 10px;">
+                        Auto-publishing is paused in <a href="{{ route('settings.index') }}" style="color: var(--primary); text-decoration: underline;">Settings</a> — enable it to resume scheduled uploads.
+                    </div>
+                @elseif(!$cronHealthy)
                     <div style="font-size: 0.75rem; color: #f87171; margin-top: 10px;">
                         @if($lastCronCheckAt)
                             Scheduler hasn't checked in for {{ $lastCronCheckAt->diffForHumans() }}. Install it with <code style="font-size: 0.7rem;">php artisan cron:install</code> or keep <code style="font-size: 0.7rem;">php artisan schedule:work</code> running.

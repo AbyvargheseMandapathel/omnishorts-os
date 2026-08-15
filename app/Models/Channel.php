@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class Channel extends Model
 {
@@ -24,6 +26,7 @@ class Channel extends Model
         'post_times',
         'google_client_id',
         'google_client_secret',
+        'gemini_enabled',
     ];
 
     protected function casts(): array
@@ -32,7 +35,37 @@ class Channel extends Model
             'posts_per_day' => 'integer',
             'post_times' => 'array',
             'google_client_secret' => 'encrypted',
+            'gemini_enabled' => 'boolean',
         ];
+    }
+
+    /**
+     * Whether Gemini AI analysis applies to this channel. A per-channel
+     * override (null = unset) wins over the global Settings toggle — one
+     * channel can use Gemini while another skips it entirely.
+     */
+    public function geminiAnalysisEnabled(): bool
+    {
+        if ($this->gemini_enabled !== null) {
+            return $this->gemini_enabled;
+        }
+
+        return Setting::get('gemini.enabled') === '1';
+    }
+
+    /**
+     * Save a per-channel Gemini override ('enabled', 'disabled' or
+     * 'default' to clear it back to the global setting).
+     */
+    public function setGeminiOverride(string $mode): void
+    {
+        $this->update([
+            'gemini_enabled' => match ($mode) {
+                'enabled' => true,
+                'disabled' => false,
+                default => null,
+            },
+        ]);
     }
 
     /**
@@ -86,16 +119,16 @@ class Channel extends Model
     /**
      * Earliest cron slot (date + time) that is not yet occupied by a scheduled publication.
      */
-    public function nextFreeSlot(\Illuminate\Support\Carbon|\Carbon\Carbon|null $from = null): \Carbon\Carbon
+    public function nextFreeSlot(\Illuminate\Support\Carbon|Carbon|null $from = null): Carbon
     {
         $cursor = $from ? $from->copy()->startOfDay() : now()->copy()->startOfDay();
 
-        $occupied = \Illuminate\Support\Facades\DB::table('publications')
+        $occupied = DB::table('publications')
             ->join('videos', 'videos.id', '=', 'publications.video_id')
             ->where('videos.channel_id', $this->id)
             ->where('publications.status', 'scheduled')
             ->pluck('publications.scheduled_at')
-            ->map(fn ($at) => \Carbon\Carbon::parse($at)->format('Y-m-d H:i'))
+            ->map(fn ($at) => Carbon::parse($at)->format('Y-m-d H:i'))
             ->all();
 
         for ($day = 0; $day < 60; $day++) {
@@ -105,7 +138,7 @@ class Channel extends Model
                 if ($slot->lessThanOrEqualTo(now())) {
                     continue;
                 }
-                if (!in_array($slot->format('Y-m-d H:i'), $occupied, true)) {
+                if (! in_array($slot->format('Y-m-d H:i'), $occupied, true)) {
                     return $slot;
                 }
             }
@@ -119,11 +152,11 @@ class Channel extends Model
     public function scheduleLabel(): string
     {
         $times = array_map(
-            fn ($t) => \Carbon\Carbon::createFromFormat('H:i', $t)->format('h:i A'),
+            fn ($t) => Carbon::createFromFormat('H:i', $t)->format('h:i A'),
             $this->postingTimes()
         );
 
-        return count($times) . ' post' . (count($times) > 1 ? 's' : '') . '/day at ' . implode(' & ', $times);
+        return count($times).' post'.(count($times) > 1 ? 's' : '').'/day at '.implode(' & ', $times);
     }
 
     public function user(): BelongsTo

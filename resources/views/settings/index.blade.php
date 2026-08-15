@@ -66,12 +66,140 @@
                     </span>
                 </div>
 
+                <div style="margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border-subtle);">
+                    <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 2px;">Per-Channel Overrides</div>
+                    <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 12px;">
+                        One channel can use Gemini while another skips it. Channels set to <strong>Default</strong> follow the global toggle above.
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        @forelse($channels as $channel)
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                                <div style="min-width: 0;">
+                                    <div style="font-weight: 600; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ $channel->name }}</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-dim);">
+                                        @if($channel->gemini_enabled === null)
+                                            Currently: global ({{ $geminiEnabled ? 'Enabled' : 'Disabled' }})
+                                        @else
+                                            Currently: {{ $channel->gemini_enabled ? 'Enabled' : 'Disabled' }}
+                                        @endif
+                                    </div>
+                                </div>
+                                <select name="channel_overrides[{{ $channel->id }}]" class="form-input" style="width: auto; max-width: 160px; padding: 6px 10px; font-size: 0.8rem;">
+                                    <option value="default" {{ $channel->gemini_enabled === null ? 'selected' : '' }}>Default (global)</option>
+                                    <option value="enabled" {{ $channel->gemini_enabled === true ? 'selected' : '' }}>Enabled</option>
+                                    <option value="disabled" {{ $channel->gemini_enabled === false ? 'selected' : '' }}>Disabled</option>
+                                </select>
+                            </div>
+                        @empty
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">No channels yet — create one from the channel switcher first.</div>
+                        @endforelse
+                    </div>
+                </div>
+
                 <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
                     <button type="submit" class="btn btn-primary btn-sm">Save Settings</button>
                     <button type="button" class="btn btn-secondary btn-sm" id="testGeminiBtn" data-test-url="{{ route('settings.gemini.test') }}" @if(!$geminiHasApiKey) disabled title="Save an API key first" @endif>Test Gemini Connection</button>
                     <span id="geminiTestResult" style="font-size: 0.8rem;"></span>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Scheduler & Cron Jobs -->
+    <div class="card" style="margin-bottom: 22px;">
+        <div class="card-body" style="padding: 20px 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+                <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: var(--accent-emerald); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 1rem;">Scheduler &amp; Cron Jobs</div>
+                    <div style="font-size: 0.8rem; color: var(--text-dim); margin-top: 2px;">
+                        Auto-publish reels, refresh analytics, and prune old files — on your schedule.
+                    </div>
+                </div>
+                <span class="badge" style="{{ $cronEnabled ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);' : 'background: rgba(255,255,255,0.06); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.14);' }}">
+                    {{ $cronEnabled ? '● Enabled' : '○ Disabled' }}
+                </span>
+            </div>
+
+            <form method="POST" action="{{ route('settings.cron.save') }}">
+                @csrf
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer;">
+                        <input type="checkbox" name="enabled" value="1" style="accent-color: var(--primary);" {{ $cronEnabled ? 'checked' : '' }}>
+                        Enable scheduler (master switch)
+                    </label>
+                    <span style="font-size: 0.78rem; color: var(--text-dim); display: block; margin-top: 4px;">
+                        When OFF, no job runs automatically — manual buttons (Run Now, Refresh All) still work.
+                    </span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 0.85rem;">Auto-publish due reels</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Checks every minute · uploads scheduled videos to YouTube</div>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;">
+                            <input type="checkbox" name="publish_enabled" value="1" style="accent-color: var(--primary);" {{ $cronPublishEnabled ? 'checked' : '' }}>
+                            On
+                        </label>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 0.85rem;">Refresh YouTube analytics</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Runs twice daily (08:00 &amp; 20:00) · views, likes, comments, shares, subscribers</div>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;">
+                            <input type="checkbox" name="analytics_enabled" value="1" style="accent-color: var(--primary);" {{ $cronAnalyticsEnabled ? 'checked' : '' }}>
+                            On
+                        </label>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 0.85rem;">Prune old video files</div>
+                            <div style="font-size: 0.72rem; color: var(--text-dim);">Runs daily · frees hosting storage by deleting files past retention</div>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; cursor: pointer; flex-shrink: 0;">
+                            <input type="checkbox" name="prune_enabled" value="1" style="accent-color: var(--primary);" {{ $cronPruneEnabled ? 'checked' : '' }}>
+                            On
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button type="submit" class="btn btn-primary btn-sm">Save Cron Settings</button>
+                    @if($lastCronCheckAt)
+                        <span style="font-size: 0.76rem; color: var(--text-dim);">Last scheduler check: {{ $lastCronCheckAt->diffForHumans() }} · {{ $lastCronCheckAt->format('h:i A') }}</span>
+                    @endif
+                </div>
+            </form>
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
+                <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 2px;">Server Cron (OS-level)</div>
+                <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 12px;">
+                    The scheduler needs ONE OS entry that runs <code style="font-size: 0.72rem;">artisan schedule:run</code> every minute — the job list above is read from the app automatically, so nothing else ever needs updating. On Windows the button creates a Task Scheduler entry; on Linux/Hostinger it installs a crontab line.
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+                    <form method="POST" action="{{ route('settings.cron.install') }}">
+                        @csrf
+                        <button type="submit" class="btn btn-secondary btn-sm">↻ Install / Sync Cron</button>
+                    </form>
+                    <form method="POST" action="{{ route('settings.cron.uninstall') }}">
+                        @csrf
+                        <button type="submit" class="btn btn-danger btn-sm" data-confirm="Remove the OS-level cron entry? Scheduled uploads will stop until reinstalled.">Uninstall Cron</button>
+                    </form>
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 4px;">
+                    Manual line for cPanel / Hostinger Cron Jobs (Linux only):
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <code style="font-size: 0.72rem; background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); padding: 6px 10px; border-radius: 6px; display: inline-block; max-width: 100%; overflow-x: auto;">{{ $cronLine }}</code>
+                    <button type="button" class="btn btn-secondary btn-sm" data-copy="{{ $cronLine }}">Copy</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>

@@ -100,7 +100,7 @@ class ProcessDuePublications extends Command
                 });
 
                 // Best-effort first stats fetch right after a successful upload;
-                // the hourly analytics:refresh keeps them fresh. Never blocks.
+                // the twice-daily analytics:refresh keeps them fresh. Never blocks.
                 try {
                     app(YouTubeAnalytics::class)->refresh($publication->fresh());
                 } catch (\Throwable) {
@@ -274,7 +274,9 @@ class ProcessDuePublications extends Command
     {
         $analyzer = app(GeminiVideoAnalyzer::class);
 
-        if (! $analyzer->enabled()) {
+        // Per-channel override honored: one channel may use Gemini while
+        // another skips it (falls back to existing metadata).
+        if (! $analyzer->enabled($video->channel)) {
             return null;
         }
 

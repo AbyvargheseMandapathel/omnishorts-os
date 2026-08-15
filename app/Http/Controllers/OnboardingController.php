@@ -15,12 +15,14 @@ class OnboardingController extends Controller
         if ($user->channels()->count() > 0) {
             return redirect()->route('dashboard');
         }
+
         return view('onboarding.welcome');
     }
 
     public function step1()
     {
         $step1Data = session('onboarding.step1', []);
+
         return view('onboarding.step1', compact('step1Data'));
     }
 
@@ -55,18 +57,18 @@ class OnboardingController extends Controller
                 'profile_image' => $user->avatar,
             ]);
 
-            // Create a starter short so the library isn't empty
+            // Create a starter short so the library isn't empty. No fabricated
+            // metrics — duration and virality stay unknown ("—") until a real
+            // file / Gemini analysis exists.
             Video::create([
                 'channel_id' => $channel->id,
                 'title' => 'Your First Reel — Ready to Schedule',
                 'description' => 'Upload your own edited reels from the Content Library, or import a whole bundle at once.',
-                'duration' => 42,
                 'status' => 'ready',
                 'ai_data' => [
                     'hook' => 'Wait until you see what these reels can do for your channel!',
                     'caption' => 'Drop a comment if you want more of these every day.',
                     'hashtags' => '#shorts #viral #content #growth #youtube',
-                    'virality_score' => 92,
                 ],
             ]);
 

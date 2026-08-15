@@ -28,6 +28,67 @@ class YouTubeAnalytics
 
     private const VIDEOS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos';
 
+    private const CHANNELS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/channels';
+
+    /**
+     * Refresh a connected account's real subscriber count from YouTube
+     * (channels.list?part=statistics). Updates follower_count so the
+     * dashboard never shows a stale connect-time number. Returns false when
+     * there is nothing to fetch (no creds / no channel id / API failure) —
+     * the stored value is kept untouched.
+     */
+    public function refreshAccount(SocialAccount $account): bool
+    {
+        if ($account->platform !== 'youtube') {
+            return false;
+        }
+
+        $creds = $account->googleOAuthCredentials();
+        if (! filled($creds['client_id']) || ! filled($creds['client_secret'])) {
+            return false;
+        }
+
+        $channelId = $account->credentials['youtube_channel_id'] ?? null;
+        if (! $channelId) {
+            return false;
+        }
+
+        $accessToken = $account->freshAccessToken();
+        if (! $accessToken) {
+            return false;
+        }
+
+        try {
+            $response = Http::withToken($accessToken)
+                ->timeout(30)
+                ->get(self::CHANNELS_ENDPOINT, [
+                    'part' => 'statistics',
+                    'id' => $channelId,
+                ]);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        if ($response->failed()) {
+            return false;
+        }
+
+        $stats = $response->json('items.0.statistics');
+        if (! is_array($stats)) {
+            return false;
+        }
+
+        // Only overwrite with a real, disclosed number — never zero it out.
+        $subscriberCount = (int) ($stats['subscriberCount'] ?? 0);
+        if ($subscriberCount <= 0) {
+            return false;
+        }
+
+        $account->update(['follower_count' => $subscriberCount]);
+
+        return true;
+    }
+
     public function refresh(Publication $publication): ?array
     {
         $account = $publication->socialAccount;

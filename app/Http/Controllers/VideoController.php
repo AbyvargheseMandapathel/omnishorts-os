@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Publication;
+use App\Models\PublicationMetric;
 use App\Models\Video;
 use App\Services\GeminiVideoAnalyzer;
+use App\Services\VideoProbe;
 use App\Services\YouTubeAnalytics;
 use App\Services\YouTubeUploader;
 use Carbon\Carbon;
@@ -65,8 +67,10 @@ class VideoController extends Controller
         ]);
 
         $filePath = null;
+        $duration = null;
         if ($request->hasFile('video_file')) {
             $filePath = $request->file('video_file')->store('videos', $this->videoDisk());
+            $duration = app(VideoProbe::class)->durationSeconds($request->file('video_file')->getRealPath());
         }
 
         $title = $validated['title'];
@@ -75,13 +79,14 @@ class VideoController extends Controller
             'title' => $title,
             'description' => $validated['description'] ?? null,
             'file_path' => $filePath,
-            'duration' => rand(25, 58),
+            'duration' => $duration,
             'status' => 'ready',
+            // No fabricated metrics: virality score only appears after a real
+            // Gemini analysis (or is never shown).
             'ai_data' => [
                 'hook' => "Nobody is talking about this $title secret...",
                 'caption' => "Here is the ultimate breakdown of {$title}. Tap follow for daily actionable insights!",
                 'hashtags' => '#shorts #reels #viral #growth #'.strtolower(str_replace(' ', '', substr($channel->category ?? 'content', 0, 10))),
-                'virality_score' => rand(88, 98),
             ],
         ]);
 
@@ -143,6 +148,7 @@ class VideoController extends Controller
         $videos = [];
         foreach ($request->file('videos') as $file) {
             $filePath = $file->store('videos', $this->videoDisk());
+            $duration = app(VideoProbe::class)->durationSeconds($file->getRealPath());
             $cleanName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
             $title = Str::title(str_replace(['-', '_'], ' ', $cleanName));
 
@@ -150,13 +156,12 @@ class VideoController extends Controller
                 'title' => $title,
                 'description' => null,
                 'file_path' => $filePath,
-                'duration' => rand(25, 58),
+                'duration' => $duration,
                 'status' => 'scheduled',
                 'ai_data' => [
                     'hook' => "Nobody is talking about this $title secret...",
                     'caption' => "Here is the ultimate breakdown of {$title}. Tap follow for daily actionable insights!",
                     'hashtags' => '#shorts #reels #viral #growth #'.strtolower(str_replace(' ', '', substr($channel->category ?? 'content', 0, 10))),
-                    'virality_score' => rand(88, 98),
                 ],
             ]);
         }
@@ -205,12 +210,39 @@ class VideoController extends Controller
             ->get();
 
         $nextFreeSlot = $channel->nextFreeSlot();
-        $geminiEnabled = app(GeminiVideoAnalyzer::class)->enabled();
+        $geminiEnabled = app(GeminiVideoAnalyzer::class)->enabled($channel);
 
         // Public playback URL for the uploaded file (null when no file / disk miss).
         $videoUrl = $video->playbackUrl();
 
-        return view('videos.show', compact('channel', 'video', 'youtubeAccounts', 'nextFreeSlot', 'geminiEnabled', 'videoUrl'));
+        // Real per-reel stats across the published versions of this video
+        // that have a real YouTube watch URL — simulated publishes never
+        // count. Never fabricated.
+        $realPublications = $video->publications
+            ->where('status', 'published')
+            ->filter(fn ($p) => filled($p->post_url) && str_contains($p->post_url, 'watch?v='));
+        $videoViews = (int) $realPublications->sum(fn ($p) => (int) ($p->analytics['views'] ?? 0));
+        $videoLikes = (int) $realPublications->sum(fn ($p) => (int) ($p->analytics['likes'] ?? 0));
+        $videoComments = (int) $realPublications->sum(fn ($p) => (int) ($p->analytics['comments'] ?? 0));
+        $videoShares = (int) $realPublications->sum(fn ($p) => (int) ($p->analytics['shares'] ?? 0));
+        $viewsCurve = PublicationMetric::query()
+            ->whereIn('publication_id', $video->publications->pluck('id')->all())
+            ->where('fetched_at', '>=', now()->subDays(14))
+            ->orderBy('fetched_at')
+            ->get()
+            ->groupBy(fn ($m) => $m->fetched_at->format('Y-m-d'))
+            ->map(fn ($group) => (int) $group->sum('views'))
+            ->values()
+            ->all();
+
+        // When the reel's stats were last pulled from YouTube (latest metric
+        // snapshot) — so a stale Performance card is obvious.
+        $lastRefreshedRaw = PublicationMetric::query()
+            ->whereIn('publication_id', $video->publications->pluck('id')->all())
+            ->max('fetched_at');
+        $statsLastRefreshedAt = $lastRefreshedRaw ? Carbon::parse($lastRefreshedRaw) : null;
+
+        return view('videos.show', compact('channel', 'video', 'youtubeAccounts', 'nextFreeSlot', 'geminiEnabled', 'videoUrl', 'videoViews', 'videoLikes', 'videoComments', 'videoShares', 'viewsCurve', 'statsLastRefreshedAt'));
     }
 
     /**
@@ -269,8 +301,8 @@ class VideoController extends Controller
         }
 
         $analyzer = app(GeminiVideoAnalyzer::class);
-        if (! $analyzer->enabled()) {
-            return back()->withErrors(['gemini' => 'Gemini AI analysis is disabled. Enable it in Settings first.']);
+        if (! $analyzer->enabled($channel)) {
+            return back()->withErrors(['gemini' => 'Gemini AI analysis is disabled for this channel. Enable it in Settings first.']);
         }
 
         // A completed analysis can be re-run explicitly; otherwise reuse it.
@@ -280,6 +312,47 @@ class VideoController extends Controller
         }
 
         return back()->withErrors(['gemini' => 'AI analysis failed. The scheduled upload will use the existing metadata.']);
+    }
+
+    /**
+     * Fetch fresh YouTube stats for this reel on demand (all published
+     * versions with real watch URLs). Best-effort — a failed fetch never
+     * errors out; it reports back so the user can reconnect if needed.
+     */
+    public function refreshStats(Request $request, Video $video)
+    {
+        $channel = Auth::user()->currentChannel();
+        if ($video->channel_id !== $channel->id) {
+            abort(403);
+        }
+
+        $video->load(['publications.socialAccount']);
+
+        $candidates = $video->publications
+            ->where('status', 'published')
+            ->filter(fn ($p) => filled($p->post_url) && str_contains($p->post_url, 'watch?v='))
+            ->values();
+
+        if ($candidates->isEmpty()) {
+            return back()->withErrors(['stats' => 'No published versions with real YouTube URLs yet — stats appear after a real upload.']);
+        }
+
+        $refreshed = 0;
+        foreach ($candidates as $publication) {
+            try {
+                if (app(YouTubeAnalytics::class)->refresh($publication) !== null) {
+                    $refreshed++;
+                }
+            } catch (\Throwable) {
+                // Best-effort — never break the page over a stats fetch.
+            }
+        }
+
+        if ($refreshed > 0) {
+            return back()->with('success', "Stats refreshed from YouTube for {$refreshed} published version(s).");
+        }
+
+        return back()->withErrors(['stats' => 'Stats could not be refreshed right now — check that the YouTube connection is still valid.']);
     }
 
     public function update(Request $request, Video $video)
@@ -387,7 +460,7 @@ class VideoController extends Controller
                 'status' => $status,
                 'post_url' => $postUrl,
                 // Real stats are fetched right after a real upload (or by the
-                // hourly analytics:refresh) — never fabricated numbers.
+                // twice-daily analytics:refresh) — never fabricated numbers.
                 'analytics' => null,
             ]
         );
@@ -397,7 +470,7 @@ class VideoController extends Controller
         ]);
 
         // Best-effort first stats fetch after a real upload; never blocks or
-        // surfaces errors — the hourly analytics:refresh covers the rest.
+        // surfaces errors — the twice-daily analytics:refresh covers the rest.
         if ($status === 'published' && $videoId) {
             try {
                 app(YouTubeAnalytics::class)->refresh($publication->fresh());

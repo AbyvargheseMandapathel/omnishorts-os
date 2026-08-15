@@ -39,7 +39,8 @@ class Video extends Model
     protected function casts(): array
     {
         return [
-            'duration' => 'integer',
+            // duration is intentionally not cast: null means "not probed yet"
+            // and must survive round-trips instead of collapsing to 0.
             'ai_data' => 'array',
             'ai_hashtags' => 'array',
             'ai_best_moment' => 'array',

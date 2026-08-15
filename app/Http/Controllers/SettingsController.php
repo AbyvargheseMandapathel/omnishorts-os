@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use App\Services\GeminiVideoAnalyzer;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 
 class SettingsController extends Controller
@@ -18,7 +21,57 @@ class SettingsController extends Controller
             'geminiModel' => $analyzer->model(),
             'geminiHasApiKey' => filled(Setting::get('gemini.api_key')),
             'geminiModels' => GeminiVideoAnalyzer::MODELS,
+            'channels' => Auth::user()->channels()->orderBy('name')->get(),
+            // Scheduler / cron job state.
+            'cronEnabled' => Setting::get('cron.enabled', '1') === '1',
+            'cronPublishEnabled' => Setting::get('cron.publish_enabled', '1') === '1',
+            'cronAnalyticsEnabled' => Setting::get('cron.analytics_enabled', '1') === '1',
+            'cronPruneEnabled' => Setting::get('cron.prune_enabled', '1') === '1',
+            'lastCronCheckAt' => Setting::get('cron.last_checked') ? Carbon::parse(Setting::get('cron.last_checked')) : null,
+            // Exact crontab line to paste on Linux / Hostinger (cPanel Cron Jobs).
+            'cronLine' => '* * * * * cd '.base_path().' && '.PHP_BINARY.' artisan schedule:run >> /dev/null 2>&1',
         ]);
+    }
+
+    public function saveCron(Request $request)
+    {
+        $validated = $request->validate([
+            'enabled' => ['nullable', 'boolean'],
+            'publish_enabled' => ['nullable', 'boolean'],
+            'analytics_enabled' => ['nullable', 'boolean'],
+            'prune_enabled' => ['nullable', 'boolean'],
+        ]);
+
+        Setting::set('cron.enabled', $request->boolean('enabled') ? '1' : '0');
+        Setting::set('cron.publish_enabled', $request->boolean('publish_enabled') ? '1' : '0');
+        Setting::set('cron.analytics_enabled', $request->boolean('analytics_enabled') ? '1' : '0');
+        Setting::set('cron.prune_enabled', $request->boolean('prune_enabled') ? '1' : '0');
+
+        return back()->with('success', 'Cron job settings saved.');
+    }
+
+    /**
+     * Create / refresh the OS-level scheduler entry (Windows Task or
+     * crontab) — re-running is idempotent and picks up any path changes.
+     */
+    public function installCron()
+    {
+        $exitCode = Artisan::call('cron:install');
+        $output = trim(Artisan::output());
+
+        return back()->with($exitCode === 0 ? 'success' : 'error', $output ?: 'Cron install finished.');
+    }
+
+    /**
+     * Remove the OS-level scheduler entry. App-level toggles above are not
+     * touched — this only stops the OS from calling schedule:run.
+     */
+    public function uninstallCron()
+    {
+        $exitCode = Artisan::call('cron:uninstall');
+        $output = trim(Artisan::output());
+
+        return back()->with($exitCode === 0 ? 'success' : 'error', $output ?: 'Cron uninstall finished.');
     }
 
     public function saveGemini(Request $request)
@@ -29,6 +82,9 @@ class SettingsController extends Controller
             'model' => ['required', 'string', 'max:120'],
             'api_key' => ['nullable', 'string', 'max:500'],
             'remove_api_key' => ['nullable', 'boolean'],
+            // Per-channel overrides: one channel can use Gemini, another not.
+            'channel_overrides' => ['nullable', 'array'],
+            'channel_overrides.*' => ['nullable', 'in:default,enabled,disabled'],
         ]);
 
         // The key is never echoed back: blank keeps the saved one unless the
@@ -42,6 +98,12 @@ class SettingsController extends Controller
 
         Setting::set('gemini.model', $validated['model']);
         Setting::set('gemini.enabled', $request->boolean('enabled') ? '1' : '0');
+
+        // Apply per-channel overrides (only for channels owned by this user).
+        $overrides = $validated['channel_overrides'] ?? [];
+        foreach (Auth::user()->channels()->get() as $channel) {
+            $channel->setGeminiOverride((string) ($overrides[(string) $channel->id] ?? 'default'));
+        }
 
         return back()->with('success', 'Gemini AI settings saved.');
     }

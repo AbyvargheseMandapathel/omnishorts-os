@@ -69,6 +69,44 @@ class VideoStorageTest extends TestCase
         Storage::disk('ftp')->assertExists($video->file_path);
     }
 
+    public function test_upload_probes_real_duration_from_file(): void
+    {
+        [$user] = $this->createUserWithChannelAndYoutube();
+        Storage::fake('public');
+
+        $real = new UploadedFile(
+            base_path('tests/fixtures/tiny.mp4'),
+            'tiny.mp4',
+            'video/mp4',
+            null,
+            true
+        );
+
+        $this->actingAs($user)->post(route('videos.store'), [
+            'title' => 'Tiny Reel',
+            'video_file' => $real,
+        ]);
+
+        $video = Video::first();
+        $this->assertSame(1, $video->duration, 'Duration must come from the real file, not a random value');
+    }
+
+    public function test_upload_keeps_duration_null_when_not_probeable(): void
+    {
+        [$user] = $this->createUserWithChannelAndYoutube();
+        Storage::fake('public');
+
+        // Fake file bytes cannot be parsed — duration must stay null ("—"),
+        // never a fabricated number.
+        $this->actingAs($user)->post(route('videos.store'), [
+            'title' => 'Untimed Reel',
+            'video_file' => UploadedFile::fake()->create('reel.mp4', 100, 'video/mp4'),
+        ]);
+
+        $video = Video::first();
+        $this->assertNull($video->duration);
+    }
+
     public function test_upload_defaults_to_public_disk(): void
     {
         [$user] = $this->createUserWithChannelAndYoutube();

@@ -81,7 +81,7 @@
                     </button>
 
                     <span style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.75); color: white; font-size: 0.72rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; z-index: 4;">
-                        0:{{ str_pad($video->duration, 2, '0', STR_PAD_LEFT) }}
+                        @if($video->duration)0:{{ str_pad($video->duration, 2, '0', STR_PAD_LEFT) }}@else—@endif
                     </span>
 
                     <div style="position: absolute; top: 10px; left: 10px; z-index: 4;">

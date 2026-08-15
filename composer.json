@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.3",
         "firebase/php-jwt": "^7.1",
+        "james-heinrich/getid3": "^1.9",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
         "league/flysystem-ftp": "^3.31"
@@ -81,6 +82,10 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
+        },
+        "platform": {
+            "php": "8.3.0",
+            "ext-ftp": "8.3.0"
         }
     },
     "minimum-stability": "stable",

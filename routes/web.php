@@ -58,6 +58,7 @@ Route::middleware(['auth', 'channel.required', 'throttle:60,1'])->group(function
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/dashboard/cron/run', [DashboardController::class, 'runCron'])->name('dashboard.cron.run');
+    Route::post('/dashboard/analytics/refresh', [DashboardController::class, 'refreshAnalytics'])->name('dashboard.analytics.refresh');
 
     // Videos
     Route::get('/videos', [VideoController::class, 'index'])->name('videos.index');
@@ -70,6 +71,7 @@ Route::middleware(['auth', 'channel.required', 'throttle:60,1'])->group(function
     Route::post('/videos/{video}/publish', [VideoController::class, 'publish'])->name('videos.publish');
     Route::post('/videos/{video}/reupload', [VideoController::class, 'reupload'])->name('videos.reupload');
     Route::post('/videos/{video}/analyze', [VideoController::class, 'analyze'])->name('videos.analyze');
+    Route::post('/videos/{video}/refresh-stats', [VideoController::class, 'refreshStats'])->name('videos.refresh-stats');
     Route::post('/videos/{video}/progress', [VideoController::class, 'simulateProgress'])->name('videos.progress');
     Route::delete('/videos/{video}', [VideoController::class, 'destroy'])->name('videos.destroy');
 
@@ -93,4 +95,7 @@ Route::middleware(['auth', 'channel.required', 'throttle:60,1'])->group(function
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::post('/settings/gemini', [SettingsController::class, 'saveGemini'])->name('settings.gemini.save');
     Route::post('/settings/gemini/test', [SettingsController::class, 'testGemini'])->name('settings.gemini.test');
+    Route::post('/settings/cron', [SettingsController::class, 'saveCron'])->name('settings.cron.save');
+    Route::post('/settings/cron/install', [SettingsController::class, 'installCron'])->name('settings.cron.install');
+    Route::post('/settings/cron/uninstall', [SettingsController::class, 'uninstallCron'])->name('settings.cron.uninstall');
 });

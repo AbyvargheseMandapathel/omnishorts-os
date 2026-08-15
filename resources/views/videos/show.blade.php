@@ -75,7 +75,7 @@
 
         <div style="display: flex; gap: 8px;">
             <span class="badge badge-ready">9:16 Vertical</span>
-            <span class="badge badge-ai">0:{{ str_pad($video->duration, 2, '0', STR_PAD_LEFT) }}</span>
+            <span class="badge badge-ai">@if($video->duration)0:{{ str_pad($video->duration, 2, '0', STR_PAD_LEFT) }}@else—@endif</span>
             @if(isset($video->ai_data['virality_score']))
                 <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">
                     ★ {{ $video->ai_data['virality_score'] }}% Viral Score
@@ -331,6 +331,82 @@
                         @error('gemini')
                             <span style="font-size: 0.8rem; color: #f87171; display: block; margin-top: 10px;">{{ $message }}</span>
                         @enderror
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        <!-- Performance: real YouTube stats for this reel -->
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h3 class="card-title">Performance</h3>
+                    <p class="card-subtitle">
+                        Real YouTube stats · refreshed twice daily
+                        @if($statsLastRefreshedAt)
+                            · last refreshed <strong style="color: {{ $statsLastRefreshedAt->lt(now()->subHours(24)) ? '#fbbf24' : 'var(--text-dim)' }};">{{ $statsLastRefreshedAt->diffForHumans() }}</strong>
+                        @else
+                            · not refreshed yet
+                        @endif
+                    </p>
+                </div>
+                @if($video->publications->where('status', 'published')->isNotEmpty())
+                    <form method="POST" action="{{ route('videos.refresh-stats', $video) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-secondary btn-sm">↻ Refresh Stats</button>
+                    </form>
+                @endif
+            </div>
+            <div class="card-body">
+                @error('stats')
+                    <div style="font-size: 0.8rem; color: #f87171; margin-bottom: 12px;">{{ $message }}</div>
+                @enderror
+                @if($videoViews + $videoLikes + $videoComments + $videoShares > 0)
+                    @php
+                        $curve = $viewsCurve;
+                        $maxVal = max($curve ?: [1]) ?: 1;
+                        $count = count($curve);
+                        $pts = [];
+                        foreach ($curve as $i => $v) {
+                            $x = $count <= 1 ? 50 : round($i * (100 / max(1, $count - 1)), 2);
+                            $y = round(26 - ($v / $maxVal) * 22, 2);
+                            $pts[] = $x.','.$y;
+                        }
+                    @endphp
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px;">
+                        <div style="padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                            <div style="font-size: 0.7rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">Views</div>
+                            <div style="font-size: 1.25rem; font-weight: 800; margin-top: 2px;">{{ number_format($videoViews) }}</div>
+                        </div>
+                        <div style="padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                            <div style="font-size: 0.7rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">Likes</div>
+                            <div style="font-size: 1.25rem; font-weight: 800; margin-top: 2px;">{{ number_format($videoLikes) }}</div>
+                        </div>
+                        <div style="padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                            <div style="font-size: 0.7rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">Comments</div>
+                            <div style="font-size: 1.25rem; font-weight: 800; margin-top: 2px;">{{ number_format($videoComments) }}</div>
+                        </div>
+                        <div style="padding: 10px 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+                            <div style="font-size: 0.7rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em;">Shares</div>
+                            <div style="font-size: 1.25rem; font-weight: 800; margin-top: 2px;">{{ number_format($videoShares) }}</div>
+                        </div>
+                    </div>
+                    @if($count > 1)
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                            <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-dim);">Views — last {{ $count }} day{{ $count === 1 ? '' : 's' }}</span>
+                            <span style="font-size: 0.78rem; font-weight: 700; color: var(--primary);">{{ number_format(max($curve)) }} peak</span>
+                        </div>
+                        <svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width: 100%; height: 64px; display: block;" class="video-views-curve">
+                            <polyline points="{{ implode(' ', $pts) }}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+                        </svg>
+                    @else
+                        <div style="text-align: center; padding: 18px 12px; border: 1px dashed var(--border-subtle); border-radius: var(--radius-md); color: var(--text-muted); font-size: 0.8rem;">
+                            Growth curve appears once the twice-daily refresh records multiple days of stats.
+                        </div>
+                    @endif
+                @else
+                    <div style="text-align: center; padding: 20px 12px; color: var(--text-muted); font-size: 0.85rem;">
+                        No real stats yet — numbers appear here after this reel is published and the twice-daily YouTube refresh runs.
                     </div>
                 @endif
             </div>
