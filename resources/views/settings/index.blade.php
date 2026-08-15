@@ -212,6 +212,81 @@
         </div>
     </div>
 </div>
+
+    <!-- Deployment & Setup -->
+    <div class="card" style="margin-bottom: 22px;">
+        <div class="card-body" style="padding: 20px 24px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+                <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-subtle); color: var(--accent-cyan); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; font-size: 1rem;">Deployment &amp; Setup</div>
+                    <div style="font-size: 0.8rem; color: var(--text-dim); margin-top: 2px;">
+                        One-click post-deploy setup — generates a missing encryption key, creates database tables, links storage, and caches config/routes/views.
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+                <div class="cron-job-row">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 0.85rem;">Encryption key (APP_KEY)</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim);">php artisan key:generate — only runs if no key is set (never overwrites an existing one)</div>
+                    </div>
+                    <span class="badge" style="{{ $deploy['has_key'] ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);' : 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);' }}">{{ $deploy['has_key'] ? '✔ Set' : '✗ Missing' }}</span>
+                </div>
+                <div class="cron-job-row">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 0.85rem;">Database tables</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim);">php artisan migrate --force — idempotent, safe to re-run</div>
+                    </div>
+                    @if($deploy['migrations'] === null)
+                        <span class="badge" style="background: rgba(255,255,255,0.06); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.14);">? DB unreachable</span>
+                    @else
+                        <span class="badge" style="{{ $deploy['migrations'] ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);' : 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);' }}">{{ $deploy['migrations'] ? '✔ Ready' : '✗ Missing' }}</span>
+                    @endif
+                </div>
+                <div class="cron-job-row">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 0.85rem;">Storage link</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim);">php artisan storage:link — makes uploaded files publicly visible</div>
+                    </div>
+                    <span class="badge" style="{{ $deploy['has_storage_link'] ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);' : 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);' }}">{{ $deploy['has_storage_link'] ? '✔ Linked' : '✗ Missing' }}</span>
+                </div>
+                <div class="cron-job-row">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 0.85rem;">Config / route / view cache</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim);">php artisan optimize — caches routes, config, and views for speed</div>
+                    </div>
+                    <span class="badge" style="{{ $deploy['config_cached'] ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);' : 'background: rgba(255,255,255,0.06); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.14);' }}">{{ $deploy['config_cached'] ? '✔ Cached' : '○ Not cached' }}</span>
+                </div>
+            </div>
+
+            <div class="save-row">
+                <form method="POST" action="{{ route('settings.deploy.run') }}" data-confirm="Run deployment setup now? This creates database tables and caches config/routes/views.">
+                    @csrf
+                    <button type="submit" class="btn btn-primary btn-sm">⚡ Run Deployment Setup</button>
+                </form>
+                <span style="font-size: 0.76rem; color: var(--text-dim);">Each step is idempotent — re-running is safe.</span>
+            </div>
+
+            @if(session('deploy_results'))
+                <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 7px;">
+                    @foreach(session('deploy_results') as $r)
+                        <div class="cron-job-row">
+                            <div style="flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px;">
+                                <span style="color: {{ $r['status'] === 'done' ? '#34d399' : ($r['status'] === 'failed' ? '#f87171' : 'var(--text-dim)') }}; flex-shrink: 0;">{{ $r['status'] === 'done' ? '✔' : ($r['status'] === 'failed' ? '✗' : '–') }}</span>
+                                <strong style="font-size: 0.8rem; flex-shrink: 0;">{{ $r['name'] }}</strong>
+                                <span style="font-size: 0.76rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis;">{{ $r['detail'] }}</span>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')

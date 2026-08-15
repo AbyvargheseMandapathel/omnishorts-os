@@ -98,4 +98,5 @@ Route::middleware(['auth', 'channel.required', 'throttle:60,1'])->group(function
     Route::post('/settings/cron', [SettingsController::class, 'saveCron'])->name('settings.cron.save');
     Route::post('/settings/cron/install', [SettingsController::class, 'installCron'])->name('settings.cron.install');
     Route::post('/settings/cron/uninstall', [SettingsController::class, 'uninstallCron'])->name('settings.cron.uninstall');
+    Route::post('/settings/deploy', [SettingsController::class, 'runDeploy'])->name('settings.deploy.run');
 });

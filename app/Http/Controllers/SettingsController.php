@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Services\DeployService;
 use App\Services\GeminiVideoAnalyzer;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class SettingsController extends Controller
 {
@@ -37,7 +40,92 @@ class SettingsController extends Controller
             ],
             // Exact crontab line to paste on Linux / Hostinger (cPanel Cron Jobs).
             'cronLine' => '* * * * * cd '.base_path().' && '.PHP_BINARY.' artisan schedule:run >> /dev/null 2>&1',
+            // One-click post-deploy setup status.
+            'deploy' => $this->deployStatus(),
         ]);
+    }
+
+    /**
+     * Cheap, side-effect-free checks shown next to the Run Deployment Setup
+     * button. null for migrations means the DB is unreachable right now.
+     */
+    private function deployStatus(): array
+    {
+        try {
+            $migrations = Schema::hasTable('migrations');
+        } catch (\Throwable) {
+            $migrations = null;
+        }
+
+        return [
+            'has_key' => filled(config('app.key')),
+            'has_storage_link' => file_exists(public_path('storage')),
+            'config_cached' => file_exists(base_path('bootstrap/cache/config.php')),
+            'migrations' => $migrations,
+        ];
+    }
+
+    /**
+     * One-click post-deploy setup: key:generate (only if missing), migrate
+     * --force, storage:link, optimize. Each step runs in its own subprocess so
+     * a freshly generated key is picked up before config caching.
+     */
+    public function runDeploy(Request $request)
+    {
+        // Migrations / caching can outlive the default request time cap.
+        @set_time_limit(0);
+
+        $runner = app(DeployService::class);
+        $results = [];
+        $keyGenerated = false;
+
+        // 1. Encryption key — only generated when missing. Regenerating an
+        // existing key would invalidate every encrypted value (secrets, sessions).
+        if (filled(config('app.key'))) {
+            $results[] = ['name' => 'Encryption key', 'status' => 'skipped', 'detail' => 'APP_KEY already set — keeping it.'];
+        } else {
+            $run = $runner->runArtisan(['key:generate', '--force']);
+            $keyGenerated = $run['exit'] === 0;
+            $results[] = ['name' => 'Encryption key', 'status' => $keyGenerated ? 'done' : 'failed', 'detail' => $this->summarizeRun($run)];
+        }
+
+        // 2. Database tables (idempotent — safe to re-run).
+        $run = $runner->runArtisan(['migrate', '--force']);
+        $results[] = ['name' => 'Database migrations', 'status' => $run['exit'] === 0 ? 'done' : 'failed', 'detail' => $this->summarizeRun($run)];
+
+        // 3. Public storage link (idempotent).
+        $run = $runner->runArtisan(['storage:link']);
+        $results[] = ['name' => 'Storage link', 'status' => $run['exit'] === 0 ? 'done' : 'failed', 'detail' => $this->summarizeRun($run)];
+
+        // 4. Cache config, routes, views, events.
+        $run = $runner->runArtisan(['optimize']);
+        $results[] = ['name' => 'Config / route / view cache', 'status' => $run['exit'] === 0 ? 'done' : 'failed', 'detail' => $this->summarizeRun($run)];
+
+        $failed = collect($results)->contains(fn ($r) => $r['status'] === 'failed');
+
+        // A freshly generated key invalidates every session — sign back in.
+        if ($keyGenerated) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login');
+        }
+
+        return back()
+            ->with('deploy_results', $results)
+            ->with($failed ? 'error' : 'success', $failed
+                ? 'Some deployment setup steps failed — see details below.'
+                : 'Deployment setup complete.');
+    }
+
+    /**
+     * Collapse the command output into a short single-line summary.
+     */
+    private function summarizeRun(array $run): string
+    {
+        $output = $run['output'] !== '' ? preg_replace('/\s+/', ' ', $run['output']) : null;
+
+        return $output ? Str::limit($output, 180) : ($run['exit'] === 0 ? 'OK' : 'Command failed');
     }
 
     public function saveCron(Request $request)
