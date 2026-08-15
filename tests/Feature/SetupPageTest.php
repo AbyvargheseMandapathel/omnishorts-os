@@ -136,6 +136,7 @@ echo strtoupper($cmd)." OK\n";
         $this->assertStringContainsString('Generated and written', $output);
         $this->assertStringContainsString('MIGRATE OK', $output);
         $this->assertStringContainsString('OPTIMIZE OK', $output);
+        $this->assertStringContainsString('VIDEOS:ENSURE-FILES OK', $output);
         $this->assertStringContainsString('has deleted itself', $output);
         // The repair file is gone after a fully successful run.
         $this->assertFileDoesNotExist($f.'/public/setup.php');

@@ -13,6 +13,9 @@ declare(strict_types=1);
  *   2. migrate       — php artisan migrate --force (via the PHP CLI)
  *   3. storage:link  — creates public/storage -> storage/app/public (pure PHP)
  *   4. optimize      — php artisan optimize (via the PHP CLI)
+ *   5. video files   — php artisan videos:ensure-files (via the PHP CLI):
+ *                      reels whose upload silently failed get a playable
+ *                      placeholder file instead of staying file-less
  *
  * SECURITY
  *   - Token-protected. The token comes from the SETUP_TOKEN environment
@@ -204,6 +207,12 @@ function setup_run_steps(): array
     [$ok, $output] = setup_cli(['optimize']);
     $results[] = ['name' => 'Config / route / view cache', 'status' => $ok ? 'ok' : 'failed', 'detail' => $ok ? 'Caches built.' : 'optimize failed — see output below.', 'output' => $output];
 
+    // --- 5. Repair reels that lost their file -------------------------------
+    // Reels whose upload silently failed (e.g. FTP disk) get a playable
+    // placeholder MP4 so they are no longer file-less.
+    [$ok, $output] = setup_cli(['videos:ensure-files']);
+    $results[] = ['name' => 'Video files (placeholders for file-less reels)', 'status' => $ok ? 'ok' : 'failed', 'detail' => $ok ? 'Reels without a file now have a playable placeholder — re-upload the real files to replace them.' : 'Could not create placeholder video files — see output below.', 'output' => $output];
+
     return $results;
 }
 
@@ -368,7 +377,7 @@ if ($allSucceeded && $action === 'run') {
             <form method="post"><input type="hidden" name="token" value="'.setup_h($givenToken).'"><input type="hidden" name="action" value="run"><button type="submit">⚡ Run deployment setup</button></form>
             <form method="post"><input type="hidden" name="token" value="'.setup_h($givenToken).'"><input type="hidden" name="action" value="delete"><button type="submit" class="danger">Delete setup.php</button></form>
         </div>
-        <p class="note">Steps: <code>key:generate</code> (only if missing) · <code>migrate --force</code> · <code>storage:link</code> · <code>optimize</code>. The page deletes itself after a fully successful run.</p>';
+        <p class="note">Steps: <code>key:generate</code> (only if missing) · <code>migrate --force</code> · <code>storage:link</code> · <code>optimize</code> · <code>videos:ensure-files</code> (placeholders for file-less reels). The page deletes itself after a fully successful run.</p>';
 }
 
 setup_page($heading, $inner);
