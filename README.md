@@ -53,6 +53,15 @@ php artisan optimize
 
 To see the exact error instead of guessing, temporarily set `APP_DEBUG=true` in `.env`, reload, then flip it back. The in-app **Settings → Deployment & Setup** button does all of this for you — but it needs the app bootable first, so the very first `key:generate` must come from the terminal.
 
+### Can't even tell what's wrong? `health` endpoints
+
+Two public diagnostics report exactly why a request 500s — **DB connectivity, migration state, storage writability, and PHP version** — with every check isolated so the endpoint answers `200`/`503` JSON spelling out the failure instead of dying itself:
+
+- **`https://your-site/health`** — the full Laravel report (also runs a real log-write probe and shows the log channel + file path). Works whenever the app boots.
+- **`https://your-site/health.php`** — the same four checks as a standalone file that Apache serves directly, **no Laravel required**. When the app cannot boot at all (missing `.env`, empty `APP_KEY`, dead DB), this is the only thing that still answers — and it includes the tail of `storage/logs/laravel.log`, which is the direct answer to "logs not generated".
+
+Both answer `503` when anything fails, and never echo secrets (no `APP_KEY`, DB/FTP passwords, or client secrets). `health.php` does show the last 50 log lines, so treat it like the log file it exposes — safe to leave deployed, or delete it once you're confident.
+
 ### No terminal? `public/setup.php`
 
 If you can't reach a terminal (or the app won't boot at all), the repo ships a **standalone repair page** at `public/setup.php` that runs the same steps from the browser even when the Laravel app cannot boot. It does `key:generate` and `storage:link` in pure PHP (no shell needed) and runs `migrate --force` + `optimize` via the PHP CLI.

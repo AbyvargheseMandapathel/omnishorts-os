@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\ChannelController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SocialAccountController;
@@ -23,6 +24,12 @@ Route::get('/', function () {
 // booleans only. Never the client secret. Helps diagnose origin_mismatch /
 // invalid_client without digging into .env.
 Route::get('/health/google', [AuthController::class, 'googleHealth'])->name('health.google');
+
+// Health — public diagnostics: DB connectivity, migration state, storage
+// writability, PHP version. Returns 200/503 JSON so a 500 never stays a
+// mystery. When the framework itself cannot boot, public/health.php reports
+// the same things standalone (no Laravel needed).
+Route::get('/health', [HealthController::class, 'index'])->name('health');
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 
